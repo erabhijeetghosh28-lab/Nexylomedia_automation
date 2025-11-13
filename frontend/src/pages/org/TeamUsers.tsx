@@ -10,7 +10,11 @@ import TextInput from "../../components/ui/TextInput";
 import Select from "../../components/ui/Select";
 import { teamMembers } from "../../data/org";
 
-const TeamUsers = () => {
+type OrgPageProps = {
+  onNavigate?: (route: string) => void;
+};
+
+const TeamUsers = ({ onNavigate }: OrgPageProps) => {
   const [inviteOpen, setInviteOpen] = useState(false);
 
   return (
@@ -21,6 +25,7 @@ const TeamUsers = () => {
         { label: "Org Admin", href: "#" },
         { label: "Team" },
       ]}
+      activeNav="team"
       rightAccessory={
         <div className="flex items-center gap-2">
           <Button
@@ -41,6 +46,7 @@ const TeamUsers = () => {
           </Button>
         </div>
       }
+      onNavigate={onNavigate}
     >
       <section className="grid gap-6 lg:grid-cols-[2fr,1fr]">
         <div className="space-y-4 rounded-2xl border border-border bg-bg p-6 shadow-subtle dark:border-slate-700 dark:bg-slate-900">

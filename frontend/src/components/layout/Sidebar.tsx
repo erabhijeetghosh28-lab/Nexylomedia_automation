@@ -1,41 +1,41 @@
 import {
-  FiActivity,
   FiBarChart2,
-  FiFileText,
   FiFlag,
   FiHome,
   FiLayers,
-  FiRepeat,
   FiSettings,
   FiUsers,
 } from "react-icons/fi";
 import clsx from "clsx";
-import type { FC } from "react";
+import type { FC, ReactNode } from "react";
 
 type NavItem = {
   label: string;
-  icon: JSX.Element;
+  icon: ReactNode;
   badge?: string;
-  active?: boolean;
+  route: string;
 };
 
 type SidebarProps = {
   collapsed?: boolean;
+  activeRoute?: string;
+  onNavigate?: (route: string) => void;
 };
 
 const navItems: NavItem[] = [
-  { label: "Overview", icon: <FiHome />, active: true },
-  { label: "Tenants", icon: <FiUsers />, badge: "12" },
-  { label: "Billing", icon: <FiFileText /> },
-  { label: "Feature Flags", icon: <FiFlag /> },
-  { label: "Automations", icon: <FiRepeat /> },
-  { label: "Analytics", icon: <FiBarChart2 /> },
-  { label: "System Health", icon: <FiActivity />, badge: "2" },
-  { label: "Integrations", icon: <FiLayers /> },
-  { label: "Settings", icon: <FiSettings /> },
+  { label: "Overview", icon: <FiHome />, route: "org-dashboard" },
+  { label: "Team & Users", icon: <FiUsers />, route: "team" },
+  { label: "Settings", icon: <FiSettings />, route: "settings" },
+  { label: "Integrations", icon: <FiLayers />, route: "integrations" },
+  { label: "Feature Flags", icon: <FiFlag />, route: "flags" },
+  { label: "Usage & Quotas", icon: <FiBarChart2 />, route: "usage" },
 ];
 
-export const Sidebar: FC<SidebarProps> = ({ collapsed = false }) => {
+export const Sidebar: FC<SidebarProps> = ({
+  collapsed = false,
+  activeRoute,
+  onNavigate,
+}) => {
   return (
     <aside
       className={clsx(
@@ -61,16 +61,19 @@ export const Sidebar: FC<SidebarProps> = ({ collapsed = false }) => {
 
       <nav className="flex-1 overflow-y-auto px-3 py-6 scrollbar-thin">
         <div className="space-y-1 text-sm font-medium text-muted dark:text-slate-400">
-          {navItems.map((item) => (
+          {navItems.map((item) => {
+            const isActive = activeRoute ? item.route === activeRoute : item.route === navItems[0].route;
+            return (
             <button
               key={item.label}
               type="button"
               className={clsx(
                 "group flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2 transition",
-                item.active
+                isActive
                   ? "bg-primary text-primary-foreground shadow-subtle"
                   : "hover:border-primary/30 hover:bg-primary/5 hover:text-primary dark:hover:border-primary/50 dark:hover:bg-primary/10",
               )}
+              onClick={() => onNavigate?.(item.route)}
             >
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-lg text-primary group-hover:bg-primary/20 group-hover:text-primary-light dark:bg-primary/20">
                 {item.icon}
@@ -88,7 +91,8 @@ export const Sidebar: FC<SidebarProps> = ({ collapsed = false }) => {
                 </>
               )}
             </button>
-          ))}
+          );
+          })}
         </div>
       </nav>
 

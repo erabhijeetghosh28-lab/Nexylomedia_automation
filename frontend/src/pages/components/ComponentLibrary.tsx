@@ -64,7 +64,11 @@ const buttonVariants = [
   { label: "Ghost", variant: "ghost" },
 ] as const;
 
-const ComponentLibraryPage = () => {
+type ComponentLibraryProps = {
+  onNavigate?: (route: string) => void;
+};
+
+const ComponentLibraryPage = ({ onNavigate }: ComponentLibraryProps) => {
   const [modalOpen, setModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("buttons");
 
@@ -139,6 +143,7 @@ const ComponentLibraryPage = () => {
         { label: "Design System", href: "#" },
         { label: "Component Library" },
       ]}
+      onNavigate={onNavigate}
       rightAccessory={
         <Button variant="outline" icon={<FiDownload />} iconPosition="right">
           Export Tokens

@@ -7,7 +7,11 @@ import Badge from "../../components/ui/Badge";
 import Button from "../../components/ui/Button";
 import { featureModules } from "../../data/org";
 
-const FeatureFlags = () => {
+type OrgPageProps = {
+  onNavigate?: (route: string) => void;
+};
+
+const FeatureFlags = ({ onNavigate }: OrgPageProps) => {
   const [flags, setFlags] = useState(featureModules);
 
   const handleToggle = (key: string) => {
@@ -26,11 +30,13 @@ const FeatureFlags = () => {
         { label: "Org Admin", href: "#" },
         { label: "Feature Flags" },
       ]}
+      activeNav="flags"
       rightAccessory={
         <Button variant="ghost" size="sm" icon={<FiEdit3 />}>
           Request new module
         </Button>
       }
+      onNavigate={onNavigate}
     >
       <section className="grid gap-6 lg:grid-cols-[2fr,1fr]">
         <Card

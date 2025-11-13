@@ -4,15 +4,15 @@ from flask import Flask
 
 from config import Config
 
+from backend.api.super_admin import super_admin_bp
 
 def create_app() -> Flask:
     """Create and configure the Flask application."""
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    # Register blueprints here (placeholders for now)
-    # from backend.api.auth import auth_bp
-    # app.register_blueprint(auth_bp, url_prefix="/api/auth")
+    # Register API blueprints
+    app.register_blueprint(super_admin_bp, url_prefix="/api/super-admin")
 
     @app.route("/", methods=["GET"])
     def index():

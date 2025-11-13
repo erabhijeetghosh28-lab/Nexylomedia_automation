@@ -6,7 +6,11 @@ import Select from "../../components/ui/Select";
 import Button from "../../components/ui/Button";
 import Toggle from "../../components/ui/Toggle";
 
-const OrganizationSettings = () => {
+type OrgPageProps = {
+  onNavigate?: (route: string) => void;
+};
+
+const OrganizationSettings = ({ onNavigate }: OrgPageProps) => {
   return (
     <AppShell
       title="Organization Settings"
@@ -15,11 +19,13 @@ const OrganizationSettings = () => {
         { label: "Org Admin", href: "#" },
         { label: "Settings" },
       ]}
+      activeNav="settings"
       rightAccessory={
         <Button variant="primary" size="sm" icon={<FiSave />}>
           Save changes
         </Button>
       }
+      onNavigate={onNavigate}
     >
       <section className="grid gap-6 lg:grid-cols-2">
         <Card
