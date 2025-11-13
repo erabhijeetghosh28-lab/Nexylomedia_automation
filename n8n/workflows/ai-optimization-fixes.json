@@ -1,0 +1,147 @@
+{
+  "name": "AI Optimization Fixes",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-optimization-fixes",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 400],
+      "webhookId": "ai-optimization-fixes"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract and validate input data from webhook\nconst webhookData = $input.item.json;\n\n// Handle different webhook data formats\nlet data = webhookData;\nif (webhookData.body) {\n  if (typeof webhookData.body === 'string') {\n    try {\n      data = JSON.parse(webhookData.body);\n    } catch (e) {\n      data = webhookData.body;\n    }\n  } else {\n    data = webhookData.body;\n  }\n} else if (webhookData.json) {\n    data = webhookData.json;\n  }\n\n// Validate required fields\nif (!data.job_id || !data.organization_id || !data.input_data) {\n    throw new Error('Missing required fields: job_id, organization_id, or input_data');\n  }\n\nconst inputData = typeof data.input_data === 'string' \n  ? JSON.parse(data.input_data) \n  : data.input_data;\n\n// Return structured data for next nodes\nreturn {\n  json: {\n    job_id: data.job_id,\n    organization_id: data.organization_id,\n    user_id: data.user_id,\n    tool_key: data.tool_key || 'seo-autopilot',\n    source_job_id: inputData.source_job_id,\n    page_id: inputData.page_id,\n    page_url: inputData.page_url,\n    seo_audit: inputData.seo_audit,\n    pagespeed: inputData.pagespeed,\n    all_vitals: inputData.all_vitals || {},\n    suggestions: inputData.suggestions || [],\n    opportunities: inputData.opportunities || [],\n    callback_url: data.callback_url || 'http://127.0.0.1:5000/api/webhooks/n8n/callback'\n  }\n};"
+      },
+      "id": "validate-input",
+      "name": "Validate Input Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [450, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Split suggestions into individual items for AI processing\n// Process top 10 critical/high priority suggestions\nconst data = $json;\nconst suggestions = data.suggestions || [];\n\n// Filter and prioritize suggestions\nconst prioritySuggestions = suggestions\n  .filter(s => s.severity === 'critical' || s.severity === 'high')\n  .slice(0, 10);\n\n// If less than 10 critical/high, add medium priority\nif (prioritySuggestions.length < 10) {\n    const mediumSuggestions = suggestions\n      .filter(s => s.severity === 'medium' && !prioritySuggestions.includes(s))\n      .slice(0, 10 - prioritySuggestions.length);\n    prioritySuggestions.push(...mediumSuggestions);\n  }\n\n// Return array of suggestions to process\nreturn prioritySuggestions.map(suggestion => ({\n  json: {\n    ...data,\n    current_suggestion: suggestion,\n    suggestion_id: suggestion.category + '_' + suggestion.strategy,\n    suggestion_type: suggestion.type,\n    suggestion_category: suggestion.category\n  }\n}));"
+      },
+      "id": "split-suggestions",
+      "name": "Split Suggestions for AI Processing",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [650, 400]
+    },
+    {
+      "parameters": {
+        "url": "http://127.0.0.1:5000/api/internal/ai/generate-fixes",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  organization_id: $json.organization_id,\n  user_id: $json.user_id,\n  page_url: $json.page_url,\n  audit_results: $json.seo_audit?.audit_results || {},\n  scores: $json.seo_audit?.scores || {},\n  pagespeed_results: $json.pagespeed || null,\n  suggestion: $json.current_suggestion,\n  all_vitals: $json.all_vitals,\n  task_type: 'seo_fix',\n  context: {\n    suggestion_type: $json.suggestion_type,\n    suggestion_category: $json.suggestion_category,\n    strategy: $json.current_suggestion?.strategy\n  }\n}) }}",
+        "options": {}
+      },
+      "id": "ai-generate-fix",
+      "name": "AI Generate Fix (Internal API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [850, 400],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate all AI fixes\nconst allItems = $input.all();\nconst originalData = $('Validate Input Data').item.json;\n\n// Collect AI fixes\nconst aiFixes = [];\nconst failedFixes = [];\n\nfor (const item of allItems) {\n  const suggestion = item.json.current_suggestion;\n  const aiResponse = item.json;\n  \n  if (aiResponse.success && aiResponse.ai_fixes) {\n    aiFixes.push({\n      suggestion: suggestion,\n      fix: aiResponse.ai_fixes,\n      model_used: aiResponse.ai_fixes.model_used || 'unknown',\n      provider: aiResponse.ai_fixes.provider || 'unknown'\n    });\n  } else {\n    failedFixes.push({\n      suggestion: suggestion,\n      error: aiResponse.error || 'AI fix generation failed'\n    });\n  }\n}\n\n// Sort fixes by suggestion severity\nconst severityOrder = { critical: 4, high: 3, medium: 2, low: 1 };\naiFixes.sort((a, b) => {\n  const aSeverity = severityOrder[a.suggestion.severity] || 0;\n  const bSeverity = severityOrder[b.suggestion.severity] || 0;\n  return bSeverity - aSeverity;\n});\n\nreturn {\n  json: {\n    ...originalData,\n    ai_fixes: aiFixes,\n    failed_fixes: failedFixes,\n    total_fixes: aiFixes.length,\n    total_failed: failedFixes.length\n  }\n};"
+      },
+      "id": "aggregate-ai-fixes",
+      "name": "Aggregate AI Fixes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1050, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create optimized fix recommendations\nconst data = $json;\nconst aiFixes = data.ai_fixes || [];\nconst suggestions = data.suggestions || [];\nconst allVitals = data.all_vitals || {};\n\n// Build comprehensive optimization report\nconst optimizedFixes = aiFixes.map(aiFix => {\n  const suggestion = aiFix.suggestion;\n  const fixData = aiFix.fix;\n  \n  // Try to extract structured fix if available\n  let structuredFix = null;\n  if (fixData.structured) {\n    structuredFix = fixData.structured;\n  } else if (fixData.raw_response) {\n    // Try to extract JSON from raw response\n    const rawText = fixData.raw_response;\n    try {\n      if (rawText.includes('```json')) {\n        const jsonStart = rawText.indexOf('```json') + 7;\n        const jsonEnd = rawText.indexOf('```', jsonStart);\n        const jsonStr = rawText.substring(jsonStart, jsonEnd).trim();\n        structuredFix = JSON.parse(jsonStr);\n      } else if (rawText.trim().startsWith('{')) {\n        structuredFix = JSON.parse(rawText);\n      }\n    } catch (e) {\n      // Keep structuredFix as null if parsing fails\n    }\n  }\n  \n  return {\n    id: suggestion.category + '_' + suggestion.strategy,\n    type: suggestion.type,\n    category: suggestion.category,\n    strategy: suggestion.strategy,\n    severity: suggestion.severity,\n    title: suggestion.title,\n    description: suggestion.description,\n    impact: suggestion.impact,\n    ai_fix: {\n      model: fixData.model_used,\n      provider: fixData.provider,\n      structured: structuredFix,\n      raw_response: fixData.raw_response,\n      usage: fixData.usage || {}\n    },\n    estimated_impact: suggestion.impact || 'Medium',\n    priority_score: suggestion.severity === 'critical' ? 10 : suggestion.severity === 'high' ? 7 : suggestion.severity === 'medium' ? 4 : 1\n  };\n});\n\n// Sort by priority score\noptimizedFixes.sort((a, b) => b.priority_score - a.priority_score);\n\n// Calculate overall optimization score\nconst totalSuggestions = suggestions.length;\nconst fixesGenerated = optimizedFixes.length;\nconst optimizationScore = totalSuggestions > 0 ? Math.round((fixesGenerated / totalSuggestions) * 100) : 0;\n\nreturn {\n  json: {\n    ...data,\n    optimized_fixes: optimizedFixes,\n    optimization_summary: {\n      total_suggestions: totalSuggestions,\n      fixes_generated: fixesGenerated,\n      failed_fixes: data.failed_fixes?.length || 0,\n      optimization_score: optimizationScore,\n      critical_fixes: optimizedFixes.filter(f => f.severity === 'critical').length,\n      high_fixes: optimizedFixes.filter(f => f.severity === 'high').length,\n      medium_fixes: optimizedFixes.filter(f => f.severity === 'medium').length\n    }\n  }\n};"
+      },
+      "id": "create-optimized-fixes",
+      "name": "Create Optimized Fixes Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1250, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare final results for callback\nconst data = $json;\nconst originalData = $('Validate Input Data').item.json;\n\n// Prepare comprehensive results\nconst results = {\n  job_id: originalData.job_id,\n  status: 'completed',\n  output_data: {\n    source_job_id: originalData.source_job_id,\n    page_id: originalData.page_id,\n    page_url: originalData.page_url,\n    optimized_fixes: data.optimized_fixes || [],\n    optimization_summary: data.optimization_summary || {},\n    ai_fixes_metadata: {\n      total_fixes: data.total_fixes || 0,\n      total_failed: data.total_failed || 0,\n      models_used: [...new Set((data.ai_fixes || []).map(f => f.model_used))],\n      providers_used: [...new Set((data.ai_fixes || []).map(f => f.provider))]\n    },\n    all_vitals: originalData.all_vitals,\n    suggestions: originalData.suggestions\n  }\n};\n\nreturn { json: results };"
+      },
+      "id": "aggregate-final-results",
+      "name": "Aggregate Final Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1450, 400]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.callback_url || 'http://127.0.0.1:5000/api/webhooks/n8n/callback' }}",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "callback",
+      "name": "Send Callback to Flask",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1650, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, job_id: $('Validate Input Data').item.json.job_id }) }}"
+      },
+      "id": "respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1850, 400]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Validate Input Data", "type": "main", "index": 0 }]]
+    },
+    "Validate Input Data": {
+      "main": [[{ "node": "Split Suggestions for AI Processing", "type": "main", "index": 0 }]]
+    },
+    "Split Suggestions for AI Processing": {
+      "main": [[{ "node": "AI Generate Fix (Internal API)", "type": "main", "index": 0 }]]
+    },
+    "AI Generate Fix (Internal API)": {
+      "main": [[{ "node": "Aggregate AI Fixes", "type": "main", "index": 0 }]]
+    },
+    "Aggregate AI Fixes": {
+      "main": [[{ "node": "Create Optimized Fixes Report", "type": "main", "index": 0 }]]
+    },
+    "Create Optimized Fixes Report": {
+      "main": [[{ "node": "Aggregate Final Results", "type": "main", "index": 0 }]]
+    },
+    "Aggregate Final Results": {
+      "main": [[{ "node": "Send Callback to Flask", "type": "main", "index": 0 }]]
+    },
+    "Send Callback to Flask": {
+      "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}
+

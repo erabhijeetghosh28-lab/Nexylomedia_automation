@@ -1,0 +1,118 @@
+{
+  "name": "SEO Autopilot - Audit Scheduler",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, organization_id, tool_key, job_type, input_data, status FROM audit_jobs WHERE status = 'pending' AND tool_key = 'seo-autopilot' AND job_type LIKE '%audit%' ORDER BY created_at ASC",
+        "options": {}
+      },
+      "id": "get-pending-audits",
+      "name": "Get Pending Audits",
+      "type": "@n8n/n8n-nodes-langchain.mssql",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "credentials": {
+        "mssql": {
+          "id": "mssql-credentials",
+          "name": "MSSQL Connection"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process audit jobs and trigger audits\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const job = item.json;\n  const inputData = typeof job.input_data === 'string' ? JSON.parse(job.input_data) : job.input_data;\n  \n  results.push({\n    json: {\n      job_id: job.id,\n      organization_id: job.organization_id,\n      tool_key: job.tool_key,\n      job_type: job.job_type,\n      page_url: inputData.page_url || inputData.page_id,\n      domain_id: inputData.domain_id,\n      callback_url: `http://127.0.0.1:5000/api/webhooks/n8n/callback`\n    }\n  });\n}\n\nreturn results;"
+      },
+      "id": "process-audits",
+      "name": "Process Audit Jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.page_url }}",
+        "method": "GET",
+        "options": {}
+      },
+      "id": "trigger-page-audit",
+      "name": "Trigger Page Audit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.callback_url }}",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "job_id",
+              "value": "={{ $json.job_id }}"
+            },
+            {
+              "name": "status",
+              "value": "completed"
+            },
+            {
+              "name": "result_data",
+              "value": "={{ $json }}"
+            }
+          ]
+        }
+      },
+      "id": "callback-flask",
+      "name": "Callback to Flask",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [[{"node": "Get Pending Audits", "type": "main", "index": 0}]]
+    },
+    "Get Pending Audits": {
+      "main": [[{"node": "Process Audit Jobs", "type": "main", "index": 0}]]
+    },
+    "Process Audit Jobs": {
+      "main": [[{"node": "Trigger Page Audit", "type": "main", "index": 0}]]
+    },
+    "Trigger Page Audit": {
+      "main": [[{"node": "Callback to Flask", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {},
+  "staticData": null,
+  "tags": [
+    {
+      "name": "SEO Autopilot",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "seo-autopilot"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

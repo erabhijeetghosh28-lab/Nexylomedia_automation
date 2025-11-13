@@ -1,0 +1,32 @@
+{
+  "endpoints": {
+    "rest": "http://127.0.0.1:5000/api",
+    "webhook": "http://127.0.0.1:5678"
+  },
+  "database": {
+    "type": "mssql",
+    "host": "localhost",
+    "database": "nexylo",
+    "user": "nexylo",
+    "password": "Nexylomedia@25"
+  },
+  "tools": {
+    "seo-autopilot": {
+      "enabled": true,
+      "webhook_path": "/webhook/seo"
+    },
+    "prospect-radar": {
+      "enabled": false,
+      "webhook_path": "/webhook/prospect-radar"
+    },
+    "campaign-management": {
+      "enabled": false,
+      "webhook_path": "/webhook/campaign-management"
+    },
+    "ads-integration": {
+      "enabled": false,
+      "webhook_path": "/webhook/ads-integration"
+    }
+  }
+}
+

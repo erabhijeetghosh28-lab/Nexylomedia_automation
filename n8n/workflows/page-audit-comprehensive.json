@@ -1,0 +1,477 @@
+{
+  "name": "SEO Page Audit - Comprehensive",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "page-audit-comprehensive",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        400
+      ],
+      "webhookId": "page-audit-comprehensive"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract and validate input data from webhook\nconst webhookData = $input.item.json;\n\n// Handle different webhook data formats\nlet data = webhookData;\nif (webhookData.body) {\n  if (typeof webhookData.body === 'string') {\n    try {\n      data = JSON.parse(webhookData.body);\n    } catch (e) {\n      data = webhookData.body;\n    }\n  } else {\n    data = webhookData.body;\n  }\n} else if (webhookData.json) {\n  data = webhookData.json;\n}\n\n// Validate required fields\nif (!data.job_id || !data.organization_id || !data.input_data) {\n  throw new Error('Missing required fields: job_id, organization_id, or input_data');\n}\n\nconst inputData = typeof data.input_data === 'string' \n  ? JSON.parse(data.input_data) \n  : data.input_data;\n\n// VALIDATION: PageSpeed API key is REQUIRED (backend should prevent this, but check here as safety)\nconst pagespeedKey = inputData.pagespeed_api_key || inputData.pagespeed_api_key_id;\nif (!pagespeedKey && (!inputData.pagespeed_api_key || inputData.pagespeed_api_key.trim() === '')) {\n  throw new Error('PageSpeed API key is required. Please configure a PageSpeed API key for this domain before running audits.');\n}\n\n// Determine strategies to run - ALWAYS run both mobile and desktop\n// FORCE both strategies - ignore ALL input, always use both\nlet strategies = ['mobile', 'desktop']; // ALWAYS both, NO exceptions\n\n// Debug logging\nconsole.log('Validate Input - inputData.strategy:', inputData.strategy);\nconsole.log('Validate Input - inputData.strategies:', inputData.strategies);\nconsole.log('Validate Input - inputData.force_both:', inputData.force_both);\nconsole.log('Validate Input - FORCED strategies:', strategies);\nconsole.log('PageSpeed API key present:', !!pagespeedKey);\n\nconst strategy = 'both'; // Set to 'both' for metadata\n\n// Return structured data for next nodes\nreturn {\n  json: {\n    job_id: data.job_id,\n    organization_id: data.organization_id,\n    user_id: data.user_id,\n    tool_key: data.tool_key || 'seo-autopilot',\n    page_id: inputData.page_id,\n    page_url: inputData.page_url,\n    domain_url: inputData.domain_url,\n    strategy: strategy, // Original strategy selection\n    strategies: strategies, // Array of strategies to process\n    pagespeed_api_key: inputData.pagespeed_api_key,\n    pagespeed_api_key_id: inputData.pagespeed_api_key_id,\n    callback_url: data.callback_url || 'http://127.0.0.1:5000/api/webhooks/n8n/callback'\n  }\n};"
+      },
+      "id": "validate-input",
+      "name": "Validate Input & Parse Strategies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        450,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://127.0.0.1:5000/api/internal/seo/audit-page",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  page_url: $json.page_url,\n  domain_url: $json.domain_url,\n  strategy: 'mobile' // Base SEO audit (strategy-independent)\n}) }}",
+        "options": {}
+      },
+      "id": "seo-audit",
+      "name": "SEO Audit (Internal API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        650,
+        300
+      ],
+      "continueOnFail": true,
+      "notes": ""
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preserve original metadata after SEO audit\nconst seoResult = $json;\nconst originalData = $('Validate Input & Parse Strategies').item.json;\n\nreturn {\n  json: {\n    ...seoResult,\n    // Preserve metadata from original input\n    job_id: originalData.job_id,\n    organization_id: originalData.organization_id,\n    user_id: originalData.user_id,\n    page_id: originalData.page_id,\n    page_url: originalData.page_url,\n    domain_url: originalData.domain_url,\n    strategy: originalData.strategy,\n    strategies: originalData.strategies,\n    tool_key: originalData.tool_key,\n    callback_url: originalData.callback_url,\n    pagespeed_api_key: originalData.pagespeed_api_key,\n    pagespeed_api_key_id: originalData.pagespeed_api_key_id\n  }\n};"
+      },
+      "id": "preserve-seo-metadata",
+      "name": "Preserve SEO Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        750,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Split strategies array into individual items for Split Out node\n// Return object with strategies array for Split Out to process\nconst originalData = $json;\n\n// Force both strategies regardless of input\nconst strategies = ['mobile', 'desktop'];\n\n// Debug logging\nconsole.log('Split Strategies - Input strategies:', originalData.strategies);\nconsole.log('Split Strategies - Forced strategies:', strategies);\n\n// Create array of strategy items\nconst strategyItems = strategies.map(strategy => ({\n  ...originalData,\n  current_strategy: strategy,\n  strategies: strategies, // Always preserve both\n  // Explicitly preserve PageSpeed API key\n  pagespeed_api_key: originalData.pagespeed_api_key,\n  pagespeed_api_key_id: originalData.pagespeed_api_key_id\n}));\n\nconsole.log('Split Strategies - Created strategy items:', strategyItems.map(item => item.current_strategy));\n\n// Return object with strategies array for Split Out node\nreturn {\n  json: {\n    ...originalData,\n    strategies_array: strategyItems, // Array for Split Out to process\n    strategies: strategies // Preserve original strategies array\n  }\n};"
+      },
+      "id": "split-strategies",
+      "name": "Split Strategies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        650,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition1",
+              "leftValue": "={{ $json.pagespeed_api_key || '' }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-pagespeed-key",
+      "name": "Check PageSpeed Key",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://127.0.0.1:5000/api/internal/pagespeed/analyze",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  page_url: $json.page_url,\n  strategy: $json.current_strategy,\n  api_key: $json.pagespeed_api_key\n}) }}",
+        "options": {}
+      },
+      "id": "pagespeed-api",
+      "name": "PageSpeed API (Internal)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1250,
+        450
+      ],
+      "continueOnFail": true,
+      "notes": ""
+    },
+    {
+      "parameters": {
+        "jsCode": "// When no PageSpeed key, still call internal API endpoint\n// The endpoint will now return existing lighthouse_data from database\n// This preserves metrics when PageSpeed connection is removed\nconst originalData = $json;\nconst apiKey = originalData.pagespeed_api_key;\nconst hasKey = apiKey && typeof apiKey === 'string' && apiKey.trim().length > 0;\n\nconsole.log('=== No PageSpeed Key - START ===');\nconsole.log('Received data:', {\n  current_strategy: originalData.current_strategy || originalData.strategy,\n  has_pagespeed_api_key: !!originalData.pagespeed_api_key,\n  pagespeed_api_key_length: originalData.pagespeed_api_key ? originalData.pagespeed_api_key.length : 0\n});\n\nif (hasKey) {\n  // Key exists - this node shouldn't have been reached\n  // Return empty array to prevent this path from executing\n  console.log('No PageSpeed Key node - Key exists, returning empty array');\n  return [];\n}\n\n// No key - return data structure that will be handled by Merge Strategy Results\n// The internal API endpoint will be called (even without key) and will return existing data\nconsole.log('No PageSpeed Key node - No key found, but will use existing lighthouse_data');\nreturn { json: {\n  ...originalData,\n  success: false, // Will be set to true if existing data is found\n  error: 'PageSpeed API key not provided - will use existing data if available',\n  current_strategy: originalData.current_strategy || originalData.strategy,\n  // Note: The PageSpeed API endpoint will be called and will return existing lighthouse_data\n  // This allows the workflow to preserve metrics when connection is removed\n}};"
+      },
+      "id": "no-pagespeed-key",
+      "name": "No PageSpeed Key",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        550
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preserve metadata after PageSpeed API call\nconst pagespeedResult = $json;\n\nconsole.log('=== Preserve PageSpeed Metadata - START ===');\nconsole.log('Received pagespeedResult:', {\n  success: pagespeedResult.success,\n  page_speed_score: pagespeedResult.page_speed_score,\n  has_core_web_vitals: !!pagespeedResult.core_web_vitals,\n  has_lighthouse_data: !!pagespeedResult.lighthouse_data,\n  strategy: pagespeedResult.strategy || pagespeedResult.current_strategy,\n  error: pagespeedResult.error,\n  all_keys: Object.keys(pagespeedResult)\n});\n\n// Get metadata - PRIORITIZE current item's data first\n// The current item should have all metadata from previous nodes (Split Out Strategies, Normalize PageSpeed Key)\n// Only look back if current item is missing critical fields\n\nlet metadata = null;\n\n// Priority 1: Use current item's data (most reliable - comes from Split Out Strategies)\n// Check if current item has the required metadata fields\nconst hasRequiredMetadata = pagespeedResult.job_id && pagespeedResult.organization_id;\nif (hasRequiredMetadata) {\n  metadata = {\n    job_id: pagespeedResult.job_id,\n    organization_id: pagespeedResult.organization_id,\n    user_id: pagespeedResult.user_id,\n    page_id: pagespeedResult.page_id,\n    page_url: pagespeedResult.page_url,\n    domain_url: pagespeedResult.domain_url,\n    strategy: pagespeedResult.strategy,\n    pagespeed_api_key: pagespeedResult.pagespeed_api_key,\n    pagespeed_api_key_id: pagespeedResult.pagespeed_api_key_id,\n    strategies: pagespeedResult.strategies,\n    current_strategy: pagespeedResult.current_strategy,\n    tool_key: pagespeedResult.tool_key,\n    callback_url: pagespeedResult.callback_url\n  };\n  console.log('Preserve PageSpeed Metadata - Using metadata from current item');\n}\n\n// Priority 2: Look back at Split Strategies if current item is missing metadata\nif (!metadata || !hasRequiredMetadata) {\n  console.log('Preserve PageSpeed Metadata - Looking back at Split Strategies for metadata');\n  const splitData = $('Split Strategies').all();\n  \n  // Find the original item that matches current_strategy or use first item\n  for (const item of splitData) {\n    if (item.json.current_strategy === pagespeedResult.current_strategy || item.json.current_strategy) {\n      metadata = {\n        job_id: item.json.job_id,\n        organization_id: item.json.organization_id,\n        user_id: item.json.user_id,\n        page_id: item.json.page_id,\n        page_url: item.json.page_url,\n        domain_url: item.json.domain_url,\n        strategy: item.json.strategy,\n        pagespeed_api_key: item.json.pagespeed_api_key,\n        pagespeed_api_key_id: item.json.pagespeed_api_key_id,\n        strategies: item.json.strategies,\n        current_strategy: item.json.current_strategy,\n        tool_key: item.json.tool_key,\n        callback_url: item.json.callback_url\n      };\n      break;\n    }\n  }\n  \n  // Fallback to first item if not found\n  if (!metadata && splitData.length > 0) {\n    const firstItem = splitData[0].json;\n    metadata = {\n      job_id: firstItem.job_id,\n      organization_id: firstItem.organization_id,\n      user_id: firstItem.user_id,\n      page_id: firstItem.page_id,\n      page_url: firstItem.page_url,\n      domain_url: firstItem.domain_url,\n      strategy: firstItem.strategy,\n      pagespeed_api_key: firstItem.pagespeed_api_key,\n      pagespeed_api_key_id: firstItem.pagespeed_api_key_id,\n      strategies: firstItem.strategies,\n      current_strategy: firstItem.current_strategy,\n      tool_key: firstItem.tool_key,\n      callback_url: firstItem.callback_url\n    };\n  }\n}\n\n// Merge PageSpeed result with metadata\n// IMPORTANT: Strategy must come from metadata (from Split Strategies), not from PageSpeed API response\n// The PageSpeed API response doesn't include strategy, so we rely on metadata\n// Try to get strategy from multiple sources in order of priority:\n// 1. metadata.current_strategy (from Split Strategies - most reliable)\n// 2. metadata.strategy (fallback)\n// 3. Check if we can infer from the API response structure (unlikely)\n// 4. Default to 'mobile' if all else fails\n\nlet finalStrategy = null;\n\n// Priority 1: metadata.current_strategy (set by Split Strategies)\nif (metadata?.current_strategy) {\n  finalStrategy = metadata.current_strategy;\n  console.log('Preserve PageSpeed Metadata - Using strategy from metadata.current_strategy:', finalStrategy);\n}\n// Priority 2: metadata.strategy\nelse if (metadata?.strategy) {\n  finalStrategy = metadata.strategy;\n  console.log('Preserve PageSpeed Metadata - Using strategy from metadata.strategy:', finalStrategy);\n}\n// Priority 3: Try to get from incoming data (before PageSpeed API call)\n// Look back at what was passed to PageSpeed API\nelse if (pagespeedResult.strategy) {\n  finalStrategy = pagespeedResult.strategy;\n  console.log('Preserve PageSpeed Metadata - Using strategy from pagespeedResult.strategy:', finalStrategy);\n}\n// Priority 4: Default fallback (should not happen if workflow is correct)\nelse {\n  finalStrategy = 'mobile';\n  console.warn('Preserve PageSpeed Metadata - WARNING: No strategy found, defaulting to mobile');\n}\n\nconsole.log('Preserve PageSpeed Metadata - Final strategy:', finalStrategy, 'has metadata:', !!metadata);\n\n// Log what we're sending to Merge Strategy Results\n// IMPORTANT: Preserve ALL PageSpeed fields from API response, including success and page_speed_score\n// CRITICAL: pagespeedResult fields must come AFTER metadata to ensure they're not overwritten\n// But we also need to ensure metadata fields (job_id, etc.) are preserved\nconst finalOutput = {\n  // First spread metadata (job_id, organization_id, etc.)\n  ...(metadata || {}),\n  // Then spread PageSpeed result (this will override any conflicting fields from metadata)\n  // This ensures simplified_vitals, page_speed_score, core_web_vitals, lighthouse_data are preserved\n  ...pagespeedResult,\n  // Finally set strategy fields (these should override everything)\n  current_strategy: finalStrategy,\n  strategy: finalStrategy\n};\n\n// DEBUG: Verify critical PageSpeed fields are preserved\nconsole.log('Preserve PageSpeed Metadata - Final output verification:', {\n  has_page_speed_score: finalOutput.page_speed_score !== undefined,\n  page_speed_score: finalOutput.page_speed_score,\n  has_simplified_vitals: !!finalOutput.simplified_vitals,\n  simplified_vitals_type: typeof finalOutput.simplified_vitals,\n  simplified_vitals_keys: finalOutput.simplified_vitals ? Object.keys(finalOutput.simplified_vitals) : [],\n  has_core_web_vitals: !!finalOutput.core_web_vitals,\n  has_lighthouse_data: !!finalOutput.lighthouse_data,\n  success: finalOutput.success,\n  current_strategy: finalOutput.current_strategy\n});\n\n// Ensure success is explicitly set if we have page_speed_score or core_web_vitals\nif (finalOutput.page_speed_score !== undefined || finalOutput.core_web_vitals || finalOutput.lighthouse_data) {\n  if (finalOutput.success === undefined) {\n    finalOutput.success = true; // Default to true if we have data\n  }\n}\n\nconsole.log('=== Preserve PageSpeed Metadata - OUTPUT ===');\nconsole.log('Sending to Merge Strategy Results:', {\n  current_strategy: finalStrategy,\n  success: finalOutput.success,\n  page_speed_score: finalOutput.page_speed_score,\n  has_core_web_vitals: !!finalOutput.core_web_vitals,\n  has_lighthouse_data: !!finalOutput.lighthouse_data,\n  has_simplified_vitals: !!finalOutput.simplified_vitals,\n  simplified_vitals_keys: finalOutput.simplified_vitals ? Object.keys(finalOutput.simplified_vitals) : [],\n  all_keys: Object.keys(finalOutput).slice(0, 25)\n});\n\n// CRITICAL: Ensure we return the merged data with ALL PageSpeed fields\n// This includes success, page_speed_score, core_web_vitals, lighthouse_data, simplified_vitals\nreturn {\n  json: finalOutput\n};"
+      },
+      "id": "preserve-pagespeed-metadata",
+      "name": "Preserve PageSpeed Metadata",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge all results for each strategy\n// This node receives: (1) SEO audit from 'SEO Audit' node, (2) PageSpeed results from multiple strategies\n// IMPORTANT: $input.all() waits for ALL inputs from ALL connected paths before executing\n// Both mobile (no delay) and desktop (15s delay) paths must complete before this runs\n\nconsole.log('Merge Strategy Results - NODE TRIGGERED - Waiting for all inputs...');\nconst allItems = $input.all();\n\nconsole.log('Merge Strategy Results - ALL INPUTS RECEIVED - Processing', allItems.length, 'items');\n\nconsole.log('Merge Strategy Results - Total items received:', allItems.length);\nconsole.log('Merge Strategy Results - Item types:', allItems.map(item => {\n  const keys = Object.keys(item.json || {});\n  return {\n    has_page_speed_score: 'page_speed_score' in item.json,\n    has_success: 'success' in item.json,\n    has_audit_results: 'audit_results' in item.json,\n    has_current_strategy: 'current_strategy' in item.json,\n    keys: keys.slice(0, 10)\n  };\n}));\n\n// Find SEO audit result - check for success, audit_results, or scores fields\nlet seoAuditData = null;\nlet originalData = null;\n\n// Collect PageSpeed results by strategy\nconst pagespeedResults = {};\n\n// First pass: find original metadata (job_id, organization_id, user_id, page_id, etc.)\nfor (const item of allItems) {\n  // Prioritize items with job_id and organization_id\n  if (item.json.job_id && item.json.organization_id) {\n    originalData = {\n      job_id: item.json.job_id,\n      organization_id: item.json.organization_id,\n      user_id: item.json.user_id,\n      page_id: item.json.page_id,\n      page_url: item.json.page_url,\n      domain_url: item.json.domain_url,\n      strategy: item.json.strategy,\n      strategies: item.json.strategies,\n      tool_key: item.json.tool_key,\n      callback_url: item.json.callback_url\n    };\n    break; // Found the best match\n  }\n}\n\n\n// DEBUG: Log all items received before processing\nconsole.log('Merge Strategy Results - DEBUG: All items details:', allItems.map((item, idx) => ({\n  index: idx,\n  has_current_strategy: !!(item.json.current_strategy),\n  current_strategy: item.json.current_strategy,\n  has_page_speed_score: item.json.page_speed_score !== undefined,\n  page_speed_score: item.json.page_speed_score,\n  has_success: item.json.success !== undefined,\n  success: item.json.success,\n  has_error: !!(item.json.error),\n  error: item.json.error,\n  has_core_web_vitals: !!(item.json.core_web_vitals),\n  has_audit_results: !!(item.json.audit_results),\n  top_keys: Object.keys(item.json).slice(0, 15)\n})));\n\n// --- Robust PageSpeed detection + extraction ---\n\n// Helper function to extract PageSpeed payload from various nested structures\nfunction extractPagespeedPayload(itemJson) {\n  // CRITICAL: Check itemJson itself FIRST (most common case - data at top level)\n  if (itemJson && typeof itemJson === 'object') {\n    // Check for any PageSpeed indicator at top level\n    if ('page_speed_score' in itemJson ||\n        'simplified_vitals' in itemJson ||\n        'core_web_vitals' in itemJson ||\n        'lighthouse_data' in itemJson ||\n        'vitals' in itemJson ||\n        ('lcp' in itemJson && typeof itemJson.lcp === 'object') ||\n        ('cls' in itemJson && typeof itemJson.cls === 'object')) {\n      console.log('extractPagespeedPayload - Found at top level:', {\n        has_page_speed_score: 'page_speed_score' in itemJson,\n        has_simplified_vitals: 'simplified_vitals' in itemJson,\n        has_lighthouse_data: 'lighthouse_data' in itemJson,\n        has_vitals: 'vitals' in itemJson\n      });\n      return itemJson;\n    }\n  }\n  \n  // candidates for PageSpeed payload (nested structures)\n  const candidates = [\n    itemJson.pagespeed_results,\n    itemJson.page_speed,\n    itemJson.pageSpeed,\n    itemJson.pagespeed,\n    itemJson.pagespeedResult,\n    itemJson.pagespeed_result,\n    itemJson.pagespeed_response,\n    itemJson.lighthouse,\n    itemJson.lighthouse_data,\n    itemJson.pageSpeedData\n  ];\n\n  // Check nested candidates\n  for (const cand of candidates) {\n    if (!cand || typeof cand !== 'object') continue;\n    // presence of any of these indicates PageSpeed data\n    if ('page_speed_score' in cand ||\n        'simplified_vitals' in cand ||\n        'core_web_vitals' in cand ||\n        'lighthouse_data' in cand ||\n        'lcp' in cand ||\n        'cls' in cand ||\n        'inp' in cand) {\n      console.log('extractPagespeedPayload - Found in nested candidate');\n      return cand;\n    }\n    // sometimes the payload is nested inside 'combined' or similar:\n    if ('combined' in cand && typeof cand.combined === 'object') {\n      const c = cand.combined;\n      if ('page_speed_score' in c || 'core_web_vitals' in c || 'simplified_vitals' in c) {\n        console.log('extractPagespeedPayload - Found in combined');\n        return c;\n      }\n    }\n  }\n  \n  console.log('extractPagespeedPayload - No payload found. Top-level keys:', Object.keys(itemJson || {}).slice(0, 20));\n  return null;\n}\n\n// Second pass: extract SEO audit and PageSpeed results\nfor (const item of allItems) {\n  const j = item.json || {};\n  \n  // Detect SEO audit - check for ANY indicator of SEO audit data\n  // SEO audit can have: audit_results, scores, meta_tags, headings, links, images, content_metrics, technical_seo\n  // Also check for category_scores, overall_score, word_count, h1_count, etc.\n  if (!seoAuditData) {\n    const hasAuditResults = !!(j.audit_results || j.auditResults);\n    const hasScores = !!(j.scores || j.category_scores || j.overall_score);\n    const hasSeoData = !!(j.meta_tags || j.headings || j.links || j.images || j.content_metrics || j.technical_seo);\n    const hasWordCount = j.word_count !== undefined;\n    const hasH1Count = j.h1_count !== undefined;\n    const hasSeoMetrics = !!(hasAuditResults || hasScores || hasSeoData || hasWordCount || hasH1Count);\n    \n    // Also check if it's from SEO Audit API (has success and doesn't have PageSpeed indicators)\n    const isFromSeoAudit = j.success === true && !j.page_speed_score && !j.simplified_vitals && !j.core_web_vitals && !j.lighthouse_data;\n    \n    if (hasSeoMetrics || isFromSeoAudit) {\n      seoAuditData = j;\n      console.log('Merge Strategy Results - ✅ Detected SEO audit data:', {\n        has_audit_results: hasAuditResults,\n        has_scores: hasScores,\n        has_seo_data: hasSeoData,\n        has_word_count: hasWordCount,\n        has_h1_count: hasH1Count,\n        is_from_seo_audit: isFromSeoAudit\n      });\n      if (!originalData) originalData = {};\n      // copy basic metadata if missing\n      ['job_id','organization_id','user_id','page_id','page_url','domain_url','strategy','strategies','tool_key','callback_url']\n        .forEach(k => { if (!originalData[k] && j[k]) originalData[k] = j[k]; });\n    }\n  }\n\n  // Try to find pagespeed payload with tolerant search\n  const payload = extractPagespeedPayload(j);\n  console.log('Merge Strategy Results - Item index:', allItems.indexOf(item), 'Payload found:', !!payload, {\n    has_payload: !!payload,\n    payload_keys: payload ? Object.keys(payload).slice(0, 15) : [],\n    item_top_keys: Object.keys(j).slice(0, 15)\n  });\n  if (payload) {\n    // determine strategy: prefer explicit current_strategy -> strategy -> fallback from parent item\n    const strategy = j.current_strategy || j.strategy || (payload.current_strategy || payload.strategy) || j['x-strategy'] || 'mobile';\n    \n    // pull out the canonical fields (attempt multiple names)\n    const page_speed_score = payload.page_speed_score ?? payload.score ?? payload.pageSpeedScore ?? payload.combined?.page_speed_score;\n    const core_web_vitals = payload.core_web_vitals ?? payload.coreWebVitals ?? payload.combined?.core_web_vitals ?? {};\n    const lighthouse_data = payload.lighthouse_data ?? payload.lighthouse ?? payload.lighthouseData ?? {};\n    const simplified_vitals = payload.simplified_vitals ?? payload.simplifiedVitals ?? {};\n\n    pagespeedResults[strategy] = {\n      success: payload.success !== false,\n      page_speed_score: page_speed_score,\n      core_web_vitals: core_web_vitals,\n      lighthouse_data: lighthouse_data,\n      simplified_vitals: simplified_vitals\n    };\n\n    console.log('Merge Strategy Results - ✅ Extracted PageSpeed for strategy:', strategy, {\n      page_speed_score, \n      has_cwv: !!Object.keys(core_web_vitals||{}).length, \n      has_lh: !!Object.keys(lighthouse_data||{}).length,\n      has_simplified_vitals: !!Object.keys(simplified_vitals||{}).length\n    });\n\n    // merge metadata if present\n    if (!originalData) originalData = {};\n    ['job_id','organization_id','user_id','page_id','page_url','domain_url','strategy','strategies','tool_key','callback_url']\n      .forEach(k => { if (!originalData[k] && j[k]) originalData[k] = j[k]; });\n  } else {\n    // no payload found - log keys to help debugging\n    console.log('Merge Strategy Results - No PageSpeed payload in item. Keys:', Object.keys(j).slice(0,20));\n  }\n}\n\n// Fallback: use first item if still no originalData\nif (!originalData && allItems.length > 0) {\n  originalData = {\n    job_id: allItems[0].json.job_id,\n    organization_id: allItems[0].json.organization_id,\n    user_id: allItems[0].json.user_id,\n    page_id: allItems[0].json.page_id,\n    page_url: allItems[0].json.page_url,\n    domain_url: allItems[0].json.domain_url,\n    strategy: allItems[0].json.strategy,\n    strategies: allItems[0].json.strategies,\n    tool_key: allItems[0].json.tool_key,\n    callback_url: allItems[0].json.callback_url\n  };\n}\n\n// Ensure we have at least an empty object\nif (!originalData) {\n  originalData = {};\n}\n\n// COMBINE mobile and desktop PageSpeed results into single combined score\n// Use ANY result that has page_speed_score, regardless of success flag\nconsole.log('Merge Strategy Results - Combining PageSpeed results into single score...');\nconsole.log('Available strategies:', Object.keys(pagespeedResults));\nconsole.log('PagespeedResults details:', Object.keys(pagespeedResults).map(s => ({\n  strategy: s,\n  has_page_speed_score: pagespeedResults[s].page_speed_score !== undefined,\n  page_speed_score: pagespeedResults[s].page_speed_score,\n  success: pagespeedResults[s].success,\n  has_cwv: !!Object.keys(pagespeedResults[s].core_web_vitals || {}).length,\n  has_lighthouse_data: !!Object.keys(pagespeedResults[s].lighthouse_data || {}).length\n})));\n\nlet combinedPagespeed = null;\n\n// Helper: Check if a result has usable data (page_speed_score OR core_web_vitals OR lighthouse_data)\nfunction hasUsableData(result) {\n  if (!result) return false;\n  return result.page_speed_score !== undefined || \n         (result.core_web_vitals && Object.keys(result.core_web_vitals).length > 0) ||\n         (result.lighthouse_data && Object.keys(result.lighthouse_data).length > 0) ||\n         (result.simplified_vitals && Object.keys(result.simplified_vitals).length > 0);\n}\n\n// Priority 1: Use mobile if it has usable data (regardless of success flag)\nif (hasUsableData(pagespeedResults.mobile)) {\n  combinedPagespeed = {\n    success: pagespeedResults.mobile.success !== false, // Default to true if not explicitly false\n    page_speed_score: pagespeedResults.mobile.page_speed_score,\n    core_web_vitals: pagespeedResults.mobile.core_web_vitals || {},\n    lighthouse_data: pagespeedResults.mobile.lighthouse_data || {},\n    simplified_vitals: pagespeedResults.mobile.simplified_vitals || {},\n    strategy: 'mobile',\n    combined_from: ['mobile']\n  };\n  console.log('Merge Strategy Results - Using mobile PageSpeed result (has usable data)');\n}\n// Priority 2: Use desktop if mobile not available\nelse if (hasUsableData(pagespeedResults.desktop)) {\n  combinedPagespeed = {\n    success: pagespeedResults.desktop.success !== false,\n    page_speed_score: pagespeedResults.desktop.page_speed_score,\n    core_web_vitals: pagespeedResults.desktop.core_web_vitals || {},\n    lighthouse_data: pagespeedResults.desktop.lighthouse_data || {},\n    simplified_vitals: pagespeedResults.desktop.simplified_vitals || {},\n    strategy: 'desktop',\n    combined_from: ['desktop']\n  };\n  console.log('Merge Strategy Results - Using desktop PageSpeed result (has usable data)');\n}\n// Priority 3: Use any result that has data (prefer mobile)\nelse if (pagespeedResults.mobile || pagespeedResults.desktop) {\n  const source = pagespeedResults.mobile || pagespeedResults.desktop;\n  if (hasUsableData(source)) {\n    combinedPagespeed = {\n      success: source.success !== false,\n      page_speed_score: source.page_speed_score,\n      core_web_vitals: source.core_web_vitals || {},\n      lighthouse_data: source.lighthouse_data || {},\n      simplified_vitals: source.simplified_vitals || {},\n      strategy: source === pagespeedResults.mobile ? 'mobile' : 'desktop',\n      combined_from: [source === pagespeedResults.mobile ? 'mobile' : 'desktop']\n    };\n    console.log('Merge Strategy Results - Using available PageSpeed result');\n  }\n}\n\n// If still no result, check if we have ANY strategy with data\nif (!combinedPagespeed) {\n  // Try any strategy key (in case it's not 'mobile' or 'desktop')\n  for (const strategyKey of Object.keys(pagespeedResults)) {\n    const result = pagespeedResults[strategyKey];\n    if (hasUsableData(result)) {\n      combinedPagespeed = {\n        success: result.success !== false,\n        page_speed_score: result.page_speed_score,\n        core_web_vitals: result.core_web_vitals || {},\n        lighthouse_data: result.lighthouse_data || {},\n        simplified_vitals: result.simplified_vitals || {},\n        strategy: strategyKey,\n        combined_from: [strategyKey]\n      };\n      console.log(`Merge Strategy Results - Using PageSpeed result from strategy: ${strategyKey}`);\n      break;\n    }\n  }\n}\n\n// If STILL no result, create error entry\nif (!combinedPagespeed) {\n  combinedPagespeed = {\n    success: false,\n    error: 'PageSpeed analysis not completed - no result received',\n    combined_from: []\n  };\n  console.log('Merge Strategy Results - No PageSpeed results available, creating error entry');\n  console.log('Merge Strategy Results - Available pagespeedResults keys:', Object.keys(pagespeedResults));\n}\n\n// Store as \"combined\" key for backward compatibility, but also keep structure simple\nconst finalPagespeedResults = {\n  combined: combinedPagespeed\n};\n\n// Combine all data - always preserve original metadata\nconsole.log('=== Merge Strategy Results - Constructing seo_audit ===');\n\n// Build audit_results - try multiple sources\nlet auditResults = null;\nif (seoAuditData) {\n  // Priority 1: Use audit_results if it exists\n  if (seoAuditData.audit_results) {\n    auditResults = seoAuditData.audit_results;\n    console.log('✅ Using seoAuditData.audit_results');\n  }\n  // Priority 2: Try auditResults (camelCase)\n  else if (seoAuditData.auditResults) {\n    auditResults = seoAuditData.auditResults;\n    console.log('✅ Using seoAuditData.auditResults (camelCase)');\n  }\n  // Priority 3: Construct from top-level fields if they exist\n  else if (seoAuditData.meta_tags || seoAuditData.headings || seoAuditData.links || seoAuditData.images || seoAuditData.content_metrics) {\n    console.log('⚠️ Constructing audit_results from top-level fields');\n    auditResults = {\n      meta_tags: seoAuditData.meta_tags || {},\n      headings: seoAuditData.headings || {},\n      links: seoAuditData.links || {},\n      images: seoAuditData.images || {},\n      content_metrics: seoAuditData.content_metrics || {},\n      technical_seo: seoAuditData.technical_seo || {},\n      status_code: seoAuditData.status_code,\n      page_url: seoAuditData.page_url || seoAuditData.page_url\n    };\n    console.log('✅ Constructed audit_results from top-level fields');\n  }\n  \n  // Log what we have\n  if (auditResults) {\n    console.log('audit_results structure:', {\n      has_content_metrics: !!auditResults.content_metrics,\n      has_headings: !!auditResults.headings,\n      has_links: !!auditResults.links,\n      has_images: !!auditResults.images,\n      word_count: auditResults.content_metrics?.word_count || 'N/A',\n      h1: auditResults.headings?.h1 || 'N/A',\n      h2: auditResults.headings?.h2 || 'N/A',\n      images: auditResults.images?.total_images || 'N/A',\n      internal_links: auditResults.links?.internal_links || 'N/A',\n      external_links: auditResults.links?.external_links || 'N/A'\n    });\n  } else {\n    console.log('⚠️ WARNING: audit_results is NULL after all attempts');\n  }\n}\n\n// Build scores\nlet scores = null;\nif (seoAuditData) {\n  if (seoAuditData.scores) {\n    scores = seoAuditData.scores;\n  } else if (seoAuditData.overall_score || seoAuditData.category_scores) {\n    scores = {\n      overall_score: seoAuditData.overall_score,\n      category_scores: seoAuditData.category_scores || {},\n      breakdown: seoAuditData.breakdown || {},\n      issues: seoAuditData.issues || seoAuditData.seo_issues || []\n    };\n  }\n}\n\nconst combinedData = {\n  ...originalData,\n  seo_audit: seoAuditData ? {\n    success: seoAuditData.success !== false,\n    audit_results: auditResults,\n    scores: scores\n  } : null,\n  pagespeed_results: finalPagespeedResults\n};\n\nconsole.log('=== Merge Strategy Results - Final seo_audit structure ===');\nif (combinedData.seo_audit) {\n  console.log('seo_audit.success:', combinedData.seo_audit.success);\n  console.log('seo_audit.has_audit_results:', !!combinedData.seo_audit.audit_results);\n  console.log('seo_audit.has_scores:', !!combinedData.seo_audit.scores);\n  if (combinedData.seo_audit.audit_results) {\n    const ar = combinedData.seo_audit.audit_results;\n    console.log('Final audit_results metrics:', {\n      word_count: ar.content_metrics?.word_count || 0,\n      h1: ar.headings?.h1 || 0,\n      h2: ar.headings?.h2 || 0,\n      images: ar.images?.total_images || 0,\n      internal_links: ar.links?.internal_links || 0,\n      external_links: ar.links?.external_links || 0\n    });\n  } else {\n    console.log('⚠️ WARNING: Final audit_results is NULL');\n  }\n} else {\n  console.log('⚠️ WARNING: seo_audit is NULL');\n}\nconsole.log('=== END Final seo_audit structure ===');\n\nconsole.log('Merge Strategy Results - Final combined data:', {\n  has_seo_audit: !!combinedData.seo_audit,\n  pagespeed_results_keys: Object.keys(finalPagespeedResults),\n  combined_result: {\n    success: combinedPagespeed?.success,\n    has_page_speed_score: combinedPagespeed?.page_speed_score !== undefined,\n    page_speed_score: combinedPagespeed?.page_speed_score,\n    has_cwv: !!combinedPagespeed?.core_web_vitals,\n    has_lighthouse_data: !!combinedPagespeed?.lighthouse_data,\n    combined_from: combinedPagespeed?.combined_from\n  },\n  job_id: combinedData.job_id,\n  page_id: combinedData.page_id\n});\n\nreturn { json: combinedData };"
+      },
+      "id": "merge-strategy-results",
+      "name": "Merge Strategy Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1450,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract all vitals and create comprehensive suggestions\n// IMPORTANT: Preserve all metadata fields (job_id, organization_id, etc.)\nconst data = $json;\n\nconsole.log('=== Create Suggestions - START ===');\nconsole.log('Input data keys:', Object.keys(data));\nconsole.log('Has seo_audit:', !!data.seo_audit);\n\n// CRITICAL: Log SEO audit structure before processing\nif (data.seo_audit) {\n  console.log('=== Create Suggestions - SEO AUDIT DEBUG ===');\n  console.log('seo_audit type:', typeof data.seo_audit);\n  console.log('seo_audit keys:', Object.keys(data.seo_audit || {}));\n  console.log('seo_audit.success:', data.seo_audit.success);\n  console.log('Has audit_results:', !!data.seo_audit.audit_results);\n  \n  if (data.seo_audit.audit_results) {\n    const ar = data.seo_audit.audit_results;\n    console.log('audit_results has content_metrics:', !!ar.content_metrics);\n    console.log('audit_results has headings:', !!ar.headings);\n    console.log('audit_results has links:', !!ar.links);\n    console.log('audit_results has images:', !!ar.images);\n    \n    if (ar.content_metrics) {\n      console.log('content_metrics word_count:', ar.content_metrics.word_count);\n    }\n    if (ar.headings) {\n      console.log('headings h1:', ar.headings.h1);\n      console.log('headings h2:', ar.headings.h2);\n    }\n    if (ar.images) {\n      console.log('images total_images:', ar.images.total_images);\n    }\n    if (ar.links) {\n      console.log('links internal:', ar.links.internal_links);\n      console.log('links external:', ar.links.external_links);\n    }\n  } else {\n    console.log('⚠️ audit_results is MISSING in Create Suggestions');\n    // Check if data is at top level\n    if (data.seo_audit.content_metrics || data.seo_audit.headings || data.seo_audit.links) {\n      console.log('⚠️ Found metrics at TOP LEVEL of seo_audit');\n    }\n  }\n  console.log('=== END Create Suggestions - SEO AUDIT DEBUG ===');\n}\n\nconst seoAudit = data.seo_audit;\nconst pagespeedResults = data.pagespeed_results || {};\n\n// Preserve metadata first\nconst metadata = {\n  job_id: data.job_id,\n  organization_id: data.organization_id,\n  user_id: data.user_id,\n  page_id: data.page_id,\n  page_url: data.page_url,\n  domain_url: data.domain_url,\n  strategy: data.strategy,\n  strategies: data.strategies,\n  tool_key: data.tool_key,\n  callback_url: data.callback_url\n};\n\n// Helper function to extract numeric value from vital object\n// Handles both full structure {value, display_value, rating} and direct numeric values\nconst extractVitalValue = (vitalObj) => {\n  if (!vitalObj) return null;\n  if (typeof vitalObj === 'object') {\n    // Check if it's the full PageSpeedService structure (has 'value' key)\n    if ('value' in vitalObj && vitalObj.value !== null && vitalObj.value !== undefined) {\n      return parseFloat(vitalObj.value);\n    }\n    // Check for other numeric keys\n    return vitalObj.numericValue || vitalObj.numeric_value || null;\n  }\n  return typeof vitalObj === 'number' ? vitalObj : (parseFloat(vitalObj) || null);\n};\n\n// Extract all Core Web Vitals and metrics\nconst allVitals = {};\nconst allMetrics = {};\nconst allOpportunities = [];\nconst allDiagnostics = [];\n\nconsole.log('Create Suggestions - Processing pagespeedResults:', Object.keys(pagespeedResults));\n\n// Process combined PageSpeed result (single score instead of mobile/desktop)\n// Look for \"combined\" key first, then fallback to mobile/desktop for backward compatibility\nlet combinedResult = pagespeedResults.combined || pagespeedResults.mobile || pagespeedResults.desktop || null;\n\n// If we have a dict with mobile/desktop but no combined, use the first successful one\nif (!combinedResult && pagespeedResults) {\n  if (pagespeedResults.mobile && pagespeedResults.mobile.success) {\n    combinedResult = pagespeedResults.mobile;\n  } else if (pagespeedResults.desktop && pagespeedResults.desktop.success) {\n    combinedResult = pagespeedResults.desktop;\n  }\n}\n\nconsole.log('Create Suggestions - Processing combined PageSpeed result:', {\n  success: combinedResult?.success,\n  has_cwv: !!combinedResult?.core_web_vitals,\n  has_lighthouse_data: !!combinedResult?.lighthouse_data,\n  cwv_structure: combinedResult?.core_web_vitals ? Object.keys(combinedResult.core_web_vitals) : []\n});\n\nif (combinedResult && combinedResult.success) {\n  const strategy = 'combined'; // Use \"combined\" as the strategy key\n  const result = combinedResult;\n    const cwv = result.core_web_vitals || {};\n    const lighthouseData = result.lighthouse_data || {};\n    const metrics = lighthouseData.metrics || {};\n    const opportunities = lighthouseData.opportunities || [];\n    const diagnostics = lighthouseData.diagnostics || [];\n    \n    // Extract numeric values from Core Web Vitals (full structure support)\n    // LCP: {value, display_value, rating}\n    // fid_inp: {type, value, display_value, rating} - can be INP or FID\n    // CLS: {value, display_value, rating}\n    // FCP and TTFB are in metrics, not core_web_vitals\n    const lcpObj = cwv.lcp;\n    const fidInpObj = cwv.fid_inp || cwv.inp; // Handle both fid_inp and inp keys\n    const clsObj = cwv.cls;\n    const fcpObj = metrics.fcp;\n    const ttfbObj = metrics.ttfb;\n    \n    const lcpValue = extractVitalValue(lcpObj);\n    const inpValue = fidInpObj && fidInpObj.type === 'INP' ? extractVitalValue(fidInpObj) : null;\n    const clsValue = extractVitalValue(clsObj);\n    const fcpValue = extractVitalValue(fcpObj);\n    const ttfbValue = extractVitalValue(ttfbObj);\n    \n    console.log(`Create Suggestions - Extracted vitals for ${strategy}:`, {\n      lcp: lcpValue,\n      inp: inpValue,\n      cls: clsValue,\n      fcp: fcpValue,\n      ttfb: ttfbValue\n    });\n    \n    // Store simplified numeric values for suggestions (using \"combined\" key)\n    allVitals['combined'] = {\n      lcp: lcpValue,\n      inp: inpValue,\n      cls: clsValue,\n      fcp: fcpValue,\n      ttfb: ttfbValue\n    };\n    \n    // Store full structures for frontend (using \"combined\" key)\n    allMetrics['combined'] = metrics;\n    \n    // Aggregate opportunities (with \"combined\" strategy tag)\n    opportunities.forEach(opp => {\n      allOpportunities.push({\n        ...opp,\n        strategy: 'combined'\n      });\n    });\n    \n    // Aggregate diagnostics (with \"combined\" strategy tag)\n    diagnostics.forEach(diag => {\n      allDiagnostics.push({\n        ...diag,\n        strategy: 'combined'\n      });\n    });\n  }\n\n// Create suggestions based on vitals and opportunities\nconst suggestions = [];\n\n// Check Core Web Vitals and create suggestions (process combined vitals)\nconst combinedVitals = allVitals.combined || allVitals.mobile || allVitals.desktop || {};\nif (combinedVitals && Object.keys(combinedVitals).length > 0) {\n  const vitals = combinedVitals;\n  const strategy = 'combined';\n  if (vitals.lcp && vitals.lcp > 2500) {\n    suggestions.push({\n      type: 'performance',\n      category: 'LCP',\n      strategy: strategy,\n      severity: vitals.lcp > 4000 ? 'critical' : 'high',\n      title: 'Largest Contentful Paint (LCP) is too slow',\n      description: `LCP is ${vitals.lcp}ms (target: <2500ms). Optimize images, reduce server response time, or use a CDN.`,\n      impact: 'High'\n    });\n  }\n  \n  if (vitals.inp && vitals.inp > 200) {\n    suggestions.push({\n      type: 'performance',\n      category: 'INP',\n      strategy: strategy,\n      severity: vitals.inp > 500 ? 'critical' : 'high',\n      title: 'Interaction to Next Paint (INP) is too slow',\n      description: `INP is ${vitals.inp}ms (target: <200ms). Reduce JavaScript execution time and break up long tasks.`,\n      impact: 'High'\n    });\n  }\n  \n  if (vitals.cls && vitals.cls > 0.1) {\n    suggestions.push({\n      type: 'performance',\n      category: 'CLS',\n      strategy: strategy,\n      severity: vitals.cls > 0.25 ? 'critical' : 'high',\n      title: 'Cumulative Layout Shift (CLS) is too high',\n      description: `CLS is ${vitals.cls} (target: <0.1). Add size attributes to images and avoid inserting content above existing content.`,\n      impact: 'High'\n    });\n  }\n  \n  if (vitals.ttfb && vitals.ttfb > 600) {\n    suggestions.push({\n      type: 'performance',\n      category: 'TTFB',\n      strategy: strategy,\n      severity: 'medium',\n      title: 'Time to First Byte (TTFB) is slow',\n      description: `TTFB is ${vitals.ttfb}ms (target: <600ms). Optimize server response time or use a faster hosting/CDN.`,\n      impact: 'Medium'\n    });\n  }\n}\n\n// Add opportunities as suggestions\nallOpportunities.slice(0, 10).forEach(opp => {\n  suggestions.push({\n    type: 'opportunity',\n    category: opp.id || 'general',\n    strategy: opp.strategy,\n    severity: opp.savings_ms > 1000 ? 'high' : opp.savings_ms > 500 ? 'medium' : 'low',\n    title: opp.title || 'Optimization opportunity',\n    description: opp.description || '',\n    savings_ms: opp.savings_ms || 0,\n    impact: opp.savings_ms > 1000 ? 'High' : 'Medium'\n  });\n});\n\n// Sort suggestions by severity and impact\nsuggestions.sort((a, b) => {\n  const severityOrder = { critical: 4, high: 3, medium: 2, low: 1 };\n  const aSeverity = severityOrder[a.severity] || 0;\n  const bSeverity = severityOrder[b.severity] || 0;\n  return bSeverity - aSeverity;\n});\n\nconsole.log('Create Suggestions - Final output:', {\n  allVitals_keys: Object.keys(allVitals),\n  suggestions_count: suggestions.length,\n  opportunities_count: allOpportunities.length\n});\n\n// Verify seo_audit structure before passing to next node\nif (data.seo_audit) {\n  console.log('Create Suggestions - Preserving seo_audit:', {\n    has_audit_results: !!data.seo_audit.audit_results,\n    has_scores: !!data.seo_audit.scores,\n    success: data.seo_audit.success\n  });\n  if (data.seo_audit.audit_results) {\n    const ar = data.seo_audit.audit_results;\n    console.log('Create Suggestions - Preserving audit_results with metrics:', {\n      word_count: ar.content_metrics?.word_count || 0,\n      h1: ar.headings?.h1 || 0,\n      h2: ar.headings?.h2 || 0,\n      images: ar.images?.total_images || 0,\n      internal_links: ar.links?.internal_links || 0,\n      external_links: ar.links?.external_links || 0\n    });\n  }\n}\nconsole.log('=== Create Suggestions - END ===');\n\n// Return data with ALL metadata preserved AND full core_web_vitals structures\n// IMPORTANT: Keep the full pagespeed_results structure with core_web_vitals intact for frontend\nreturn {\n  json: {\n    ...metadata,\n    seo_audit: data.seo_audit, // Preserve entire seo_audit structure\n    pagespeed_results: data.pagespeed_results, // Preserve full structure with core_web_vitals\n    all_vitals: allVitals, // Simplified numeric values for suggestions\n    all_metrics: allMetrics,\n    suggestions: suggestions,\n    opportunities: allOpportunities,\n    diagnostics: allDiagnostics\n  }\n  };"
+      },
+      "id": "create-suggestions",
+      "name": "Create Suggestions from Vitals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare comprehensive results for callback\n// This node should receive data with ALL metadata preserved from previous steps\nconst data = $json;\n\nconsole.log('=== Aggregate Comprehensive Results - START ===');\nconsole.log('Input data keys:', Object.keys(data));\nconsole.log('Has seo_audit:', !!data.seo_audit);\n\n// Extract metadata - these should be preserved from previous nodes\nconst job_id = data.job_id;\nconst organization_id = data.organization_id;\nconst user_id = data.user_id;\nconst page_id = data.page_id;\nconst page_url = data.page_url;\nconst strategy = data.strategy;\nconst strategies = data.strategies || [data.strategy || 'mobile'];\n\n// Validate required fields - throw clear error if missing\nif (!job_id || !organization_id) {\n  // Try to get from workflow execution context as last resort\n  const errorMsg = `Missing required fields in Aggregate Results: job_id=${job_id}, organization_id=${organization_id}. Make sure metadata is preserved through all merge operations.`;\n  console.error(errorMsg, 'Current data keys:', Object.keys(data));\n  throw new Error(errorMsg);\n}\n\n// CRITICAL: Log SEO audit structure before processing\nif (data.seo_audit) {\n  console.log('=== SEO AUDIT STRUCTURE DEBUG ===');\n  console.log('seo_audit type:', typeof data.seo_audit);\n  console.log('seo_audit keys:', Object.keys(data.seo_audit || {}));\n  console.log('seo_audit.success:', data.seo_audit.success);\n  console.log('Has audit_results:', !!data.seo_audit.audit_results);\n  console.log('Has scores:', !!data.seo_audit.scores);\n  \n  if (data.seo_audit.audit_results) {\n    const ar = data.seo_audit.audit_results;\n    console.log('audit_results type:', typeof ar);\n    console.log('audit_results keys:', Object.keys(ar || {}));\n    console.log('Has content_metrics:', !!ar.content_metrics);\n    console.log('Has headings:', !!ar.headings);\n    console.log('Has links:', !!ar.links);\n    console.log('Has images:', !!ar.images);\n    \n    if (ar.content_metrics) {\n      console.log('content_metrics word_count:', ar.content_metrics.word_count);\n    }\n    if (ar.headings) {\n      console.log('headings h1:', ar.headings.h1);\n      console.log('headings h2:', ar.headings.h2);\n    }\n    if (ar.images) {\n      console.log('images total_images:', ar.images.total_images);\n    }\n    if (ar.links) {\n      console.log('links internal:', ar.links.internal_links);\n      console.log('links external:', ar.links.external_links);\n    }\n  } else {\n    console.log('⚠️ audit_results is MISSING or NULL');\n    // Check if data is at top level of seo_audit\n    if (data.seo_audit.content_metrics || data.seo_audit.headings || data.seo_audit.links) {\n      console.log('⚠️ Found metrics at TOP LEVEL of seo_audit (not in audit_results)');\n      console.log('Top-level content_metrics:', !!data.seo_audit.content_metrics);\n      console.log('Top-level headings:', !!data.seo_audit.headings);\n      console.log('Top-level links:', !!data.seo_audit.links);\n      console.log('Top-level images:', !!data.seo_audit.images);\n    }\n  }\n  console.log('=== END SEO AUDIT STRUCTURE DEBUG ===');\n} else {\n  console.log('⚠️ seo_audit is NULL or MISSING');\n}\n\n// Prepare seo_audit structure - preserve ALL data including metrics\nlet seoAuditOutput = null;\nif (data.seo_audit && data.seo_audit.success !== false) {\n  // Check if audit_results exists, if not, construct from top-level fields\n  let auditResults = data.seo_audit.audit_results;\n  \n  // If audit_results is missing but we have top-level data, construct it\n  if (!auditResults && (data.seo_audit.content_metrics || data.seo_audit.headings || data.seo_audit.links || data.seo_audit.images)) {\n    console.log('⚠️ Constructing audit_results from top-level fields');\n    auditResults = {\n      meta_tags: data.seo_audit.meta_tags || {},\n      headings: data.seo_audit.headings || {},\n      links: data.seo_audit.links || {},\n      images: data.seo_audit.images || {},\n      content_metrics: data.seo_audit.content_metrics || {},\n      technical_seo: data.seo_audit.technical_seo || {},\n      status_code: data.seo_audit.status_code,\n      page_url: data.seo_audit.page_url || page_url\n    };\n    console.log('✅ Constructed audit_results with:', {\n      word_count: auditResults.content_metrics?.word_count || 'N/A',\n      h1: auditResults.headings?.h1 || 'N/A',\n      h2: auditResults.headings?.h2 || 'N/A',\n      images: auditResults.images?.total_images || 'N/A',\n      internal_links: auditResults.links?.internal_links || 'N/A',\n      external_links: auditResults.links?.external_links || 'N/A'\n    });\n  }\n  \n  // Verify audit_results has metrics before creating output\n  if (auditResults) {\n    const hasMetrics = auditResults.content_metrics?.word_count > 0 || \n                      auditResults.headings?.h1 > 0 || \n                      auditResults.headings?.h2 > 0 || \n                      auditResults.images?.total_images > 0 || \n                      auditResults.links?.internal_links > 0 || \n                      auditResults.links?.external_links > 0;\n    \n    console.log('audit_results has metrics:', hasMetrics);\n    if (hasMetrics) {\n      console.log('✅ Metrics confirmed in audit_results:', {\n        word_count: auditResults.content_metrics?.word_count || 0,\n        h1: auditResults.headings?.h1 || 0,\n        h2: auditResults.headings?.h2 || 0,\n        images: auditResults.images?.total_images || 0,\n        internal_links: auditResults.links?.internal_links || 0,\n        external_links: auditResults.links?.external_links || 0\n      });\n    } else {\n      console.log('⚠️ WARNING: audit_results exists but has NO metrics (all 0)');\n    }\n  } else {\n    console.log('⚠️ WARNING: audit_results is still NULL after construction attempt');\n  }\n  \n  seoAuditOutput = {\n    audit_results: auditResults,\n    scores: data.seo_audit.scores || null\n  };\n  \n  console.log('Final seoAuditOutput structure:', {\n    has_audit_results: !!seoAuditOutput.audit_results,\n    has_scores: !!seoAuditOutput.scores,\n    audit_results_keys: seoAuditOutput.audit_results ? Object.keys(seoAuditOutput.audit_results) : []\n  });\n} else {\n  console.log('⚠️ seo_audit is null or success is false');\n}\n\n// Prepare results structure for Flask callback\nconst results = {\n  job_id: job_id,\n  status: 'completed',\n  output_data: {\n    page_id: page_id,\n    page_url: page_url,\n    strategy: strategy,\n    strategies_processed: strategies,\n    seo_audit: seoAuditOutput,\n    pagespeed: data.pagespeed_results, // For backward compatibility\n    pagespeed_results: data.pagespeed_results || {}, // Main field - dict with mobile/desktop keys\n    all_vitals: data.all_vitals || {},\n    all_metrics: data.all_metrics || {},\n    suggestions: data.suggestions || [],\n    opportunities: data.opportunities || [],\n    diagnostics: data.diagnostics || [],\n    ready_for_ai_optimization: true // Flag to trigger AI optimization workflow\n  },\n  organization_id: organization_id,\n  user_id: user_id\n};\n\n// Final verification log\nconsole.log('=== Final Output Structure ===');\nconsole.log('output_data.seo_audit:', !!results.output_data.seo_audit);\nif (results.output_data.seo_audit) {\n  console.log('output_data.seo_audit.audit_results:', !!results.output_data.seo_audit.audit_results);\n  if (results.output_data.seo_audit.audit_results) {\n    const ar = results.output_data.seo_audit.audit_results;\n    console.log('Final audit_results metrics:', {\n      word_count: ar.content_metrics?.word_count || 0,\n      h1: ar.headings?.h1 || 0,\n      h2: ar.headings?.h2 || 0,\n      images: ar.images?.total_images || 0,\n      internal_links: ar.links?.internal_links || 0,\n      external_links: ar.links?.external_links || 0\n    });\n  }\n}\nconsole.log('=== Aggregate Comprehensive Results - END ===');\n\nreturn { json: results };"
+      },
+      "id": "aggregate-results",
+      "name": "Aggregate Comprehensive Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1850,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://127.0.0.1:5000/api/webhooks/n8n/callback",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {}
+      },
+      "id": "callback",
+      "name": "Send Callback to Flask",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2050,
+        500
+      ],
+      "continueOnFail": true,
+      "notes": ""
+    },
+    {
+      "parameters": {
+        "url": "http://127.0.0.1:5000/api/webhooks/n8n/trigger-ai-optimization",
+        "method": "POST",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  job_id: $json.job_id,\n  audit_results: $json.output_data,\n  organization_id: $json.organization_id,\n  user_id: $json.user_id\n}) }}",
+        "options": {}
+      },
+      "id": "trigger-ai-optimization",
+      "name": "Trigger AI Optimization",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2250,
+        500
+      ],
+      "continueOnFail": true,
+      "notes": "Triggers second workflow for AI-powered optimization fixes"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, job_id: $json.job_id }) }}"
+      },
+      "id": "respond",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2450,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "strategies_array",
+        "options": {}
+      },
+      "id": "split-out-strategies",
+      "name": "Split Out Strategies",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        850,
+        500
+      ],
+      "notes": "Splits strategies array into individual items for sequential processing"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize pagespeed_api_key and preserve all data\nconst apiKey = $json.pagespeed_api_key;\nconst normalizedKey = (apiKey === null || apiKey === undefined) ? \"\" : String(apiKey);\n\nconsole.log(`Normalize PageSpeed Key - Strategy: ${$json.current_strategy}, Has Key: ${normalizedKey.trim().length > 0}`);\n\nreturn {\n  json: {\n    ...$json,\n    pagespeed_api_key: normalizedKey,\n    has_pagespeed_key: normalizedKey.trim().length > 0\n  }\n};"
+      },
+      "id": "normalize-pagespeed-key-new",
+      "name": "Normalize PageSpeed Key",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1650,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Input & Parse Strategies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input & Parse Strategies": {
+      "main": [
+        [
+          {
+            "node": "SEO Audit (Internal API)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Split Strategies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SEO Audit (Internal API)": {
+      "main": [
+        [
+          {
+            "node": "Preserve SEO Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preserve SEO Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge Strategy Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Strategies": {
+      "main": [
+        [
+          {
+            "node": "Split Out Strategies",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize PageSpeed Key": {
+      "main": [
+        [
+          {
+            "node": "Check PageSpeed Key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check PageSpeed Key": {
+      "main": [
+        [
+          {
+            "node": "PageSpeed API (Internal)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "No PageSpeed Key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PageSpeed API (Internal)": {
+      "main": [
+        [
+          {
+            "node": "Preserve PageSpeed Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preserve PageSpeed Metadata": {
+      "main": [
+        [
+          {
+            "node": "Merge Strategy Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No PageSpeed Key": {
+      "main": [
+        [
+          {
+            "node": "PageSpeed API (Internal)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Strategy Results": {
+      "main": [
+        [
+          {
+            "node": "Create Suggestions from Vitals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Suggestions from Vitals": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Comprehensive Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Comprehensive Results": {
+      "main": [
+        [
+          {
+            "node": "Send Callback to Flask",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Callback to Flask": {
+      "main": [
+        [
+          {
+            "node": "Trigger AI Optimization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger AI Optimization": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Strategies": {
+      "main": [
+        [
+          {
+            "node": "Normalize PageSpeed Key",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

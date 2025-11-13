@@ -1,0 +1,353 @@
+{
+  "name": "SEO Sitemap Discovery",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sitemap-discovery",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "sitemap-discovery"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract and validate input data from webhook\n// n8n webhook wraps data, so check body, json, or direct access\nconst webhookData = $input.item.json;\n\n// n8n webhook can provide data in different formats:\n// - Direct: { job_id: 1, ... }\n// - Wrapped: { body: { job_id: 1, ... }, headers: {...} }\n// - JSON string in body: { body: '{\"job_id\":1,...}' }\nlet data = webhookData;\n\n// Check if data is wrapped in 'body' or 'json'\nif (webhookData.body) {\n  // Could be object or JSON string\n  if (typeof webhookData.body === 'string') {\n    try {\n      data = JSON.parse(webhookData.body);\n    } catch (e) {\n      data = webhookData.body;\n    }\n  } else {\n    data = webhookData.body;\n  }\n} else if (webhookData.json) {\n  data = webhookData.json;\n}\n\n// Log for debugging\nconsole.log('Received webhook data:', JSON.stringify(data, null, 2));\n\n// Validate required fields\nif (!data.job_id || !data.organization_id || !data.input_data) {\n  console.error('Missing fields. Received:', Object.keys(data));\n  throw new Error('Missing required fields: job_id, organization_id, or input_data. Received keys: ' + Object.keys(data).join(', '));\n}\n\nconst inputData = typeof data.input_data === 'string' \n  ? JSON.parse(data.input_data) \n  : data.input_data;\n\n// Return structured data for next nodes\nreturn {\n  json: {\n    job_id: data.job_id,\n    organization_id: data.organization_id,\n    user_id: data.user_id,\n    tool_key: data.tool_key || 'seo-autopilot',\n    domain_url: inputData.domain_url,\n    domain_id: inputData.domain_id,\n    seo_domain_id: inputData.seo_domain_id,\n    callback_url: data.callback_url || 'http://127.0.0.1:5000/api/webhooks/n8n/callback'\n  }\n};"
+      },
+      "id": "validate-input",
+      "name": "Validate Input Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.domain_url }}/robots.txt",
+        "method": "GET",
+        "options": {
+          "timeout": 10000,
+          "followRedirect": true,
+          "allowUnauthorizedCerts": true
+        },
+        "responseFormat": "string"
+      },
+      "id": "fetch-robots",
+      "name": "Fetch robots.txt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse robots.txt to find ALL sitemap URLs and check crawl permissions\nconst robotsResponse = $input.item.json;\nconst domainData = $('Validate Input Data').item.json;\n\n// Get robots.txt content - when responseFormat is 'string', data is directly in body\nconst robotsContent = robotsResponse.body || robotsResponse.data || robotsResponse || '';\nconst robotsText = typeof robotsContent === 'string' ? robotsContent : JSON.stringify(robotsContent);\n\n// Find ALL sitemap URLs - robots.txt can have multiple Sitemap: lines\nconst sitemapRegex = /^[Ss]itemap:\\s*(.+)$/gim;\nconst sitemapUrls = [];\nlet match;\n\nwhile ((match = sitemapRegex.exec(robotsText)) !== null) {\n  const sitemapUrl = match[1].trim();\n  if (sitemapUrl) {\n    // Make URL absolute if relative\n    const absoluteUrl = sitemapUrl.startsWith('http') \n      ? sitemapUrl \n      : `${domainData.domain_url}${sitemapUrl.startsWith('/') ? '' : '/'}${sitemapUrl}`;\n    sitemapUrls.push(absoluteUrl);\n  }\n}\n\n// Check if crawling is allowed (check User-agent: * section)\n// Only block if there's an explicit Disallow: / (blocking everything)\n// NOT Disallow: /path/ (blocking specific paths)\nconst userAgentSection = robotsText.split(/^User-agent:/gim);\nlet crawlingAllowed = true;\n\n// Check for User-agent: * section\nfor (const section of userAgentSection) {\n  if (section.includes('User-agent: *') || section.trim().startsWith('*')) {\n    const rules = section.toLowerCase();\n    \n    // First check if there's an explicit Allow: / (allows everything)\n    if (rules.match(/allow:\\s*\\/\\s*$/m)) {\n      crawlingAllowed = true;\n      break; // Allow: / overrides Disallow rules\n    }\n    \n    // Check for Disallow: / exactly (not Disallow: /path/)\n    // This means: Disallow: / followed by end of line or whitespace only\n    const disallowRootMatch = rules.match(/disallow:\\s*\\/\\s*$/m);\n    if (disallowRootMatch) {\n      crawlingAllowed = false;\n      break; // Disallow: / blocks everything\n    }\n  }\n}\n\n// If no sitemaps found in robots.txt, use default\nconst defaultSitemapUrl = `${domainData.domain_url}/sitemap.xml`;\nif (sitemapUrls.length === 0) {\n  sitemapUrls.push(defaultSitemapUrl);\n}\n\nreturn {\n  json: {\n    ...domainData,\n    sitemap_urls: sitemapUrls, // ALL sitemap URLs found\n    sitemap_url: sitemapUrls[0], // First one for display\n    robots_txt_found: robotsResponse.statusCode === 200 || (robotsResponse.body && robotsResponse.body.length > 0),\n    robots_txt_content: robotsText,\n    crawling_allowed: crawlingAllowed,\n    robots_txt_allowed: crawlingAllowed,\n    total_sitemaps: sitemapUrls.length\n  }\n};"
+      },
+      "id": "parse-robots",
+      "name": "Parse robots.txt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check crawl permission and validate sitemaps\n// Note: We're discovering sitemaps, not crawling pages, so we can continue even if crawling is disallowed\nconst data = $input.item.json;\n\n// Log warning if crawling is disallowed (but continue anyway)\nif (!data.crawling_allowed) {\n  console.warn('⚠️ robots.txt disallows crawling, but continuing with sitemap discovery (sitemaps are typically public)');\n}\n\n// Validate we have sitemap URLs to process\nif (!data.sitemap_urls || data.sitemap_urls.length === 0) {\n  throw new Error('No sitemap URLs found in robots.txt and no default sitemap available');\n}\n\nconsole.log(`✅ Found ${data.sitemap_urls.length} sitemap(s) to process`);\n\n// Continue with workflow - mark that we're proceeding despite crawl disallow\nreturn {\n  json: {\n    ...data,\n    crawl_disallowed_but_proceeding: !data.crawling_allowed,\n    note: !data.crawling_allowed ? 'Proceeding with sitemap discovery despite robots.txt crawl restriction' : undefined\n  }\n};"
+      },
+      "id": "check-permission",
+      "name": "Check Crawl Permission",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "sitemap_urls",
+        "options": {}
+      },
+      "id": "split-sitemaps",
+      "name": "Split Sitemaps - Process Each",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare sitemap URL from split output\n// Split node wraps the value in an object with the field name\n// Input format: {\"sitemap_urls\": \"https://example.com/sitemap.xml\"}\nlet sitemapUrl = null;\n\nif (typeof $json === 'string') {\n  // Direct string value\n  sitemapUrl = $json;\n} else if (typeof $json === 'object' && $json !== null) {\n  // Split node wraps in object with field name \"sitemap_urls\"\n  if ($json.sitemap_urls) {\n    sitemapUrl = Array.isArray($json.sitemap_urls) ? $json.sitemap_urls[0] : $json.sitemap_urls;\n  } else {\n    // Try other possible field names\n    sitemapUrl = $json.current_sitemap_url || $json.sitemap_url || null;\n  }\n}\n\nif (!sitemapUrl || typeof sitemapUrl !== 'string') {\n  console.error('Received data:', JSON.stringify($json, null, 2));\n  throw new Error('Invalid sitemap URL. Received: ' + JSON.stringify($json));\n}\n\nreturn {\n  json: {\n    current_sitemap_url: sitemapUrl\n  }\n};"
+      },
+      "id": "prepare-sitemap-url",
+      "name": "Prepare Sitemap URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge domain data with current sitemap URL\nconst domainData = $('Parse robots.txt').item.json;\nconst preparedData = $json;\nconst currentSitemapUrl = preparedData.current_sitemap_url;\n\nif (!currentSitemapUrl || typeof currentSitemapUrl !== 'string') {\n  throw new Error('Missing or invalid current_sitemap_url in prepared data: ' + JSON.stringify(preparedData));\n}\n\nreturn {\n  json: {\n    ...domainData,\n    current_sitemap_url: currentSitemapUrl\n  }\n};"
+      },
+      "id": "merge-sitemap-data",
+      "name": "Merge Sitemap Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.current_sitemap_url }}",
+        "method": "GET",
+        "options": {
+          "timeout": 30000,
+          "followRedirect": true,
+          "allowUnauthorizedCerts": true,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "fetch-sitemap",
+      "name": "Fetch Sitemap",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1850, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Check if sitemap fetch was successful - handle string response format\nconst fetchResponse = $input.item.json;\nconst domainData = $('Merge Sitemap Data').item.json;\n\n// When responseFormat is 'string', n8n wraps it differently\n// Check multiple possible response structures\nlet sitemapContent = null;\nlet statusCode = 200;\n\n// Handle different response formats\nif (typeof fetchResponse === 'string') {\n  // Direct string response\n  sitemapContent = fetchResponse;\n  statusCode = 200;\n} else if (fetchResponse.body !== undefined) {\n  // Has body property (could be string or object)\n  sitemapContent = typeof fetchResponse.body === 'string' ? fetchResponse.body : JSON.stringify(fetchResponse.body);\n  statusCode = fetchResponse.statusCode || fetchResponse.status || 200;\n} else if (fetchResponse.data !== undefined) {\n  // Has data property\n  sitemapContent = typeof fetchResponse.data === 'string' ? fetchResponse.data : JSON.stringify(fetchResponse.data);\n  statusCode = fetchResponse.statusCode || fetchResponse.status || 200;\n} else {\n  // Try to get as string from any property\n  sitemapContent = JSON.stringify(fetchResponse);\n  statusCode = fetchResponse.statusCode || fetchResponse.status || 200;\n}\n\n// Check if we have content\nif (!sitemapContent || sitemapContent.trim().length === 0) {\n  console.warn('Sitemap fetch returned empty content, skipping...');\n  return [];\n}\n\n// Check status code if available\nif (statusCode >= 400) {\n  console.warn('Sitemap fetch returned error status:', statusCode, ', skipping...');\n  return [];\n}\n\n// Success - continue with sitemap content\nreturn {\n  json: {\n    ...domainData,\n    sitemap_response: {\n      body: sitemapContent,\n      data: sitemapContent,\n      statusCode: statusCode,\n      content: sitemapContent\n    },\n    sitemap_status_code: statusCode,\n    sitemap_content: sitemapContent\n  }\n};"
+      },
+      "id": "check-sitemap-success",
+      "name": "Check Sitemap Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [2050, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse sitemap XML and extract URLs\nconst data = $input.item.json;\nconst domainData = $('Parse robots.txt').item.json;\nconst sitemapResponse = data.sitemap_response;\n\n// Get sitemap content\nconst xmlContent = sitemapResponse.body || sitemapResponse.data || '';\nconst xmlString = typeof xmlContent === 'string' ? xmlContent : JSON.stringify(xmlContent);\n\n// Check if it's a sitemap index (contains <sitemapindex>)\nconst isSitemapIndex = xmlString.includes('<sitemapindex') || xmlString.includes('<sitemapindex>');\n\nlet urls = [];\n\nif (isSitemapIndex) {\n  // Parse sitemap index - extract nested sitemap URLs\n  // NOTE: Sitemap indexes need to be processed recursively\n  // For now, we'll return the nested sitemap URLs so they can be fetched in a loop\n  const sitemapRegex = /<loc[^>]*>(.*?)<\\/loc>/gi;\n  let match;\n  \n  while ((match = sitemapRegex.exec(xmlString)) !== null) {\n    const sitemapUrl = match[1].trim();\n    if (sitemapUrl && (sitemapUrl.endsWith('.xml') || sitemapUrl.includes('.xml'))) {\n      urls.push({ type: 'sitemap', url: sitemapUrl });\n    }\n  }\n  \n  // For sitemap index, return nested sitemap URLs wrapped as special items\n  // These will need to be fetched in a subsequent iteration\n  // Return them with a flag so the workflow can process them\n  return urls.map(item => ({\n    json: {\n      ...domainData,\n      nested_sitemap_url: item.url,\n      is_nested_sitemap: true,\n      current_sitemap_url: item.url\n    }\n  }));\n} else {\n  // Parse regular sitemap - extract page URLs\n  const urlRegex = /<loc[^>]*>(.*?)<\\/loc>/gi;\n  let match;\n  \n  while ((match = urlRegex.exec(xmlString)) !== null) {\n    const url = match[1].trim();\n    if (url && url.startsWith('http')) {\n      urls.push({ type: 'page', url: url });\n    }\n  }\n}\n\n// Limit to 500 URLs per sitemap (adjust based on plan limits)\nconst pageUrls = urls.filter(u => u.type === 'page');\nconst limitedUrls = pageUrls.slice(0, 500);\n\n// Return one item per URL\nreturn limitedUrls.map(item => ({\n  json: {\n    ...domainData,\n    page_url: item.url,\n    sitemap_source: data.current_sitemap_url,\n    urls_total_in_sitemap: pageUrls.length,\n    urls_discovered_in_sitemap: limitedUrls.length\n  }\n}));"
+      },
+      "id": "parse-sitemap",
+      "name": "Parse Sitemap XML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [2250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get domain_id once for all items - pass it along with all discovered pages\nconst allItems = $input.all();\nif (allItems.length === 0) return [];\n\n// Get domain_id from first item or from Parse robots.txt\nconst firstItem = allItems[0].json;\nconst domainData = $('Parse robots.txt').item.json;\nconst domainId = firstItem.seo_domain_id || domainData.seo_domain_id;\n\nif (!domainId) {\n  throw new Error('Missing seo_domain_id - cannot query existing pages');\n}\n\n// Return all items with domain_id attached\nreturn allItems.map(item => ({\n  json: {\n    ...item.json,\n    seo_domain_id: item.json.seo_domain_id || domainId,\n    query_domain_id: domainId  // For the query node\n  }\n}));"
+      },
+      "id": "get-domain-id",
+      "name": "Get Domain ID for Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [2280, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT page_url FROM seo_pages WHERE domain_id = {{ $json.query_domain_id || $json.seo_domain_id || $('Parse robots.txt').item.json.seo_domain_id }}",
+        "options": {
+          "queryReplacement": "singleQuery"
+        }
+      },
+      "id": "get-existing-pages",
+      "name": "Get Existing Pages",
+      "type": "n8n-nodes-base.microsoftSqlServer",
+      "typeVersion": 1,
+      "position": [2450, 300],
+      "credentials": {
+        "microsoftSqlServer": {
+          "id": "mssql-credentials",
+          "name": "Nexylo sql con"
+        }
+      },
+      "webhookId": ""
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter out duplicate pages - compare with existing pages in DB\nconst allItems = $input.all();\nif (allItems.length === 0) return [];\n\n// Separate existing pages query result from discovered pages\nlet existingPagesSet = new Set();\nconst discoveredPages = [];\n\nfor (const item of allItems) {\n  // Query results come back as arrays - check if it's the existing pages query\n  if (Array.isArray(item.json) || (item.json.page_url === undefined && item.json.length > 0)) {\n    // This is likely the existing pages query result\n    const queryResults = Array.isArray(item.json) ? item.json : [item.json];\n    queryResults.forEach(row => {\n      if (row.page_url) {\n        existingPagesSet.add(row.page_url.toLowerCase().trim());\n      }\n    });\n  } else if (item.json.page_url) {\n    // This is a discovered page\n    discoveredPages.push(item);\n  }\n}\n\n// Filter out duplicates and ensure seo_domain_id is preserved\nconst domainData = $('Parse robots.txt').item.json;\nconst defaultDomainId = domainData.seo_domain_id;\n\nconst newPages = discoveredPages\n  .filter(item => {\n    const pageUrl = item.json.page_url?.toLowerCase().trim();\n    return pageUrl && !existingPagesSet.has(pageUrl);\n  })\n  .map(item => ({\n    json: {\n      ...item.json,\n      seo_domain_id: item.json.seo_domain_id || defaultDomainId,\n      page_url: item.json.page_url\n    }\n  }));\n\nreturn newPages;"
+      },
+      "id": "filter-duplicates",
+      "name": "Filter Duplicates",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [2650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge discovered pages (from Store Discovered Pages) with query results (from Get Existing Pages)\n// Get all inputs from both connections\nconst allInputs = $input.all();\n\nif (allInputs.length === 0) return [];\n\n// Separate: discovered pages have seo_domain_id, query results don't\nconst discoveredPages = [];\nconst queryResults = [];\n\nfor (const item of allInputs) {\n  if (item.json.page_url && item.json.seo_domain_id) {\n    // This is a discovered page (has seo_domain_id)\n    discoveredPages.push(item);\n  } else if (item.json.page_url && !item.json.seo_domain_id) {\n    // This is a query result (has page_url but no seo_domain_id)\n    queryResults.push(item);\n  }\n}\n\n// Combine both streams: discovered pages first, then query results\n// Filter Duplicates will separate them and filter out duplicates\nreturn [...discoveredPages, ...queryResults];"
+      },
+      "id": "merge-discovered-query",
+      "name": "Merge Discovered with Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [2500, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store discovered pages - just pass them through\n// This node preserves discovered pages before Get Existing Pages consumes them\nreturn $input.all();"
+      },
+      "id": "store-discovered",
+      "name": "Store Discovered Pages",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [2430, 450]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "IF NOT EXISTS (SELECT 1 FROM seo_pages WHERE domain_id = {{ $json.seo_domain_id || $('Parse robots.txt').item.json.seo_domain_id || 0 }} AND page_url = '{{ String($json.page_url || \"\").replace(/'/g, \"''\") }}')\nBEGIN\n    INSERT INTO seo_pages (domain_id, page_url, audit_status)\n    VALUES ({{ $json.seo_domain_id || $('Parse robots.txt').item.json.seo_domain_id || 0 }}, '{{ String($json.page_url || \"\").replace(/'/g, \"''\") }}', 'pending')\nEND",
+        "options": {}
+      },
+      "id": "save-pages",
+      "name": "Save Pages to DB",
+      "type": "n8n-nodes-base.microsoftSqlServer",
+      "typeVersion": 1,
+      "position": [2850, 300],
+      "credentials": {
+        "microsoftSqlServer": {
+          "id": "mssql-credentials",
+          "name": "Nexylo sql con"
+        }
+      },
+      "webhookId": ""
+    },
+    {
+      "parameters": {
+        "jsCode": "// Aggregate results from all sitemaps - collect all saved pages\nconst items = $input.all();\n\n// Get domain info from previous nodes (always available)\nconst parsedRobots = $('Parse robots.txt').item.json;\nconst validateInput = $('Validate Input Data').item.json;\nconst filterDuplicates = $('Filter Duplicates');\n\n// Count pages that were attempted to be saved\nlet savedCount = 0;\nif (filterDuplicates && filterDuplicates.all) {\n  const filteredPages = filterDuplicates.all();\n  savedCount = filteredPages.filter(item => item.json.page_url).length;\n}\n\n// Build domain info with all necessary fields\nconst domainInfo = {\n  seo_domain_id: parsedRobots.seo_domain_id || validateInput.seo_domain_id,\n  job_id: parsedRobots.job_id || validateInput.job_id,\n  callback_url: parsedRobots.callback_url || validateInput.callback_url || 'http://127.0.0.1:5000/api/webhooks/n8n/callback',\n  sitemap_urls: parsedRobots.sitemap_urls || [],\n  total_sitemaps: parsedRobots.total_sitemaps || (parsedRobots.sitemap_urls ? parsedRobots.sitemap_urls.length : 1),\n  robots_txt_allowed: parsedRobots.robots_txt_allowed !== undefined ? parsedRobots.robots_txt_allowed : 1\n};\n\n// Return single item with all required data\nreturn [{\n  json: {\n    seo_domain_id: domainInfo.seo_domain_id,\n    job_id: domainInfo.job_id,\n    callback_url: domainInfo.callback_url,\n    urls_discovered: savedCount,\n    urls_total: savedCount,\n    sitemap_urls_processed: domainInfo.sitemap_urls,\n    total_sitemaps: domainInfo.total_sitemaps,\n    robots_txt_allowed: domainInfo.robots_txt_allowed\n  }\n}];"
+      },
+      "id": "aggregate-results",
+      "name": "Aggregate Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [3050, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE seo_domains SET pages_count = (SELECT COUNT(*) FROM seo_pages WHERE domain_id = {{ $json.seo_domain_id }}), last_sitemap_check = GETDATE(), sitemap_url = '{{ Array.isArray($json.sitemap_urls_processed) ? $json.sitemap_urls_processed.join(\", \") : ($json.sitemap_urls_processed || \"\") }}', robots_txt_allowed = {{ $json.robots_txt_allowed ? 1 : 0 }}, updated_at = GETDATE() WHERE id = {{ $json.seo_domain_id }}",
+        "options": {}
+      },
+      "id": "update-domain",
+      "name": "Update Domain",
+      "type": "n8n-nodes-base.microsoftSqlServer",
+      "typeVersion": 1,
+      "position": [3250, 300],
+      "credentials": {
+        "microsoftSqlServer": {
+          "id": "mssql-credentials",
+          "name": "Nexylo sql con"
+        }
+      },
+      "webhookId": ""
+    },
+    {
+      "parameters": {
+        "url": "={{ String($json.callback_url || 'http://127.0.0.1:5000/api/webhooks/n8n/callback').trim() }}",
+        "method": "POST",
+        "sendBody": true,
+        "bodyContentType": "json",
+        "jsonBody": "={\n  \"job_id\": {{ $json.job_id || $('Validate Input Data').first().json.job_id }},\n  \"status\": \"completed\",\n  \"output_data\": {\n    \"pages_found\": {{ $json.urls_discovered || 0 }},\n    \"domain_id\": {{ $json.seo_domain_id || $('Parse robots.txt').first().json.seo_domain_id }},\n    \"sitemap_urls_processed\": {{ JSON.stringify($json.sitemap_urls_processed || []) }},\n    \"total_sitemaps\": {{ $json.total_sitemaps || 0 }},\n    \"robots_txt_allowed\": {{ $json.robots_txt_allowed || 1 }}\n  }\n}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "callback-flask",
+      "name": "Send Callback to Flask",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [3450, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"job_id\": {{ $json.job_id || $('Validate Input Data').first().json.job_id }},\n  \"message\": \"Sitemap discovery completed\",\n  \"pages_found\": {{ $json.urls_discovered || 0 }},\n  \"sitemaps_processed\": {{ $json.total_sitemaps || 0 }}\n}"
+      },
+      "id": "respond-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [3650, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Validate Input Data", "type": "main", "index": 0}]]
+    },
+    "Validate Input Data": {
+      "main": [[{"node": "Fetch robots.txt", "type": "main", "index": 0}]]
+    },
+    "Fetch robots.txt": {
+      "main": [[{"node": "Parse robots.txt", "type": "main", "index": 0}]]
+    },
+    "Parse robots.txt": {
+      "main": [[{"node": "Check Crawl Permission", "type": "main", "index": 0}]]
+    },
+    "Check Crawl Permission": {
+      "main": [[{"node": "Split Sitemaps - Process Each", "type": "main", "index": 0}]]
+    },
+    "Split Sitemaps - Process Each": {
+      "main": [[{"node": "Prepare Sitemap URL", "type": "main", "index": 0}]]
+    },
+    "Prepare Sitemap URL": {
+      "main": [[{"node": "Merge Sitemap Data", "type": "main", "index": 0}]]
+    },
+    "Merge Sitemap Data": {
+      "main": [[{"node": "Fetch Sitemap", "type": "main", "index": 0}]]
+    },
+    "Fetch Sitemap": {
+      "main": [[{"node": "Check Sitemap Success", "type": "main", "index": 0}]]
+    },
+    "Check Sitemap Success": {
+      "main": [[{"node": "Parse Sitemap XML", "type": "main", "index": 0}]]
+    },
+    "Parse Sitemap XML": {
+      "main": [[{"node": "Get Domain ID for Query", "type": "main", "index": 0}]]
+    },
+    "Get Domain ID for Query": {
+      "main": [[{"node": "Get Existing Pages", "type": "main", "index": 0}, {"node": "Store Discovered Pages", "type": "main", "index": 0}]]
+    },
+    "Store Discovered Pages": {
+      "main": [[{"node": "Merge Discovered with Query", "type": "main", "index": 0}]]
+    },
+    "Get Existing Pages": {
+      "main": [[{"node": "Merge Discovered with Query", "type": "main", "index": 0}]]
+    },
+    "Merge Discovered with Query": {
+      "main": [[{"node": "Filter Duplicates", "type": "main", "index": 0}]]
+    },
+    "Filter Duplicates": {
+      "main": [[{"node": "Save Pages to DB", "type": "main", "index": 0}]]
+    },
+    "Save Pages to DB": {
+      "main": [[{"node": "Aggregate Results", "type": "main", "index": 0}]]
+    },
+    "Aggregate Results": {
+      "main": [[{"node": "Update Domain", "type": "main", "index": 0}]]
+    },
+    "Update Domain": {
+      "main": [[{"node": "Send Callback to Flask", "type": "main", "index": 0}]]
+    },
+    "Send Callback to Flask": {
+      "main": [[{"node": "Respond to Webhook", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "SEO Autopilot",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "seo-autopilot"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}

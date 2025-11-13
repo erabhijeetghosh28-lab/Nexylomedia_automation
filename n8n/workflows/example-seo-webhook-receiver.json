@@ -1,0 +1,112 @@
+{
+  "name": "SEO Webhook Receiver Example",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "webhook-receiver",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "seo-webhook-receiver"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.event_type}}",
+              "operation": "equals",
+              "value2": "crawl_completed"
+            }
+          ]
+        }
+      },
+      "id": "check-event-type",
+      "name": "Check Event Type",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://127.0.0.1:5000/api/webhooks/seo",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "event_type",
+              "value": "={{$json.event_type}}"
+            },
+            {
+              "name": "domain_id",
+              "value": "={{$json.domain_id}}"
+            },
+            {
+              "name": "project_id",
+              "value": "={{$json.project_id}}"
+            },
+            {
+              "name": "pages_crawled",
+              "value": "={{$json.pages_crawled}}"
+            }
+          ]
+        }
+      },
+      "id": "send-to-flask",
+      "name": "Send to Flask",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Check Event Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Event Type": {
+      "main": [
+        [
+          {
+            "node": "Send to Flask",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": ["seo", "webhook", "receiver"]
+}
+
+
+
+
+
+
+
+
+
+
+

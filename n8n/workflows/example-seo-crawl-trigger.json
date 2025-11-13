@@ -1,0 +1,104 @@
+{
+  "name": "SEO Crawl Trigger Example",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "seo-crawl-trigger"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process incoming webhook data\nconst data = $input.item.json;\n\n// Add timestamp and default values\nconst processed = {\n  project_id: data.project_id || 1,\n  domain_id: data.domain_id,\n  scope: data.scope || 'full',\n  timestamp: new Date().toISOString(),\n  triggered_by: 'n8n_workflow'\n};\n\nreturn {\n  json: processed\n};"
+      },
+      "id": "process-data",
+      "name": "Process Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://127.0.0.1:5000/api/jobs",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "job_type",
+              "value": "crawl"
+            },
+            {
+              "name": "domain_id",
+              "value": "={{$json.domain_id}}"
+            },
+            {
+              "name": "scope",
+              "value": "={{$json.scope}}"
+            },
+            {
+              "name": "project_id",
+              "value": "={{$json.project_id}}"
+            }
+          ]
+        }
+      },
+      "id": "call-flask-api",
+      "name": "Call Flask API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [650, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Data": {
+      "main": [
+        [
+          {
+            "node": "Call Flask API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": ["seo", "crawl", "automation"]
+}
+
+
+
+
+
+
+
+
+
+
+

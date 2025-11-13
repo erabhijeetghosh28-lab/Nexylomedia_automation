@@ -1,0 +1,123 @@
+{
+  "name": "SEO Autopilot - Crawl Trigger",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "seo-crawl-trigger",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "seo-crawl-trigger"
+    },
+    {
+      "parameters": {
+        "functionCode": "// Validate and process crawl trigger data\nconst jobData = items[0].json;\nconst orgId = jobData.organization_id;\nconst toolKey = jobData.tool_key || 'seo-autopilot';\n\n// Validate access (should already be done by Flask API)\nif (!orgId || !toolKey) {\n  throw new Error('Missing organization_id or tool_key');\n}\n\nreturn items;"
+      },
+      "id": "validate-access",
+      "name": "Validate Access",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process crawl data\nconst data = $input.item.json;\nconst inputData = typeof data.input_data === 'string' ? JSON.parse(data.input_data) : data.input_data;\n\nreturn {\n  json: {\n    job_id: data.job_id || data.id,\n    organization_id: data.organization_id,\n    tool_key: data.tool_key || 'seo-autopilot',\n    domain_url: inputData.domain_url || inputData.url,\n    domain_id: inputData.domain_id || inputData.seo_domain_id,\n    scope: inputData.scope || 'full',\n    callback_url: data.callback_url || `http://127.0.0.1:5000/api/webhooks/n8n/callback`\n  }\n};"
+      },
+      "id": "process-crawl-data",
+      "name": "Process Crawl Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.domain_url }}/sitemap.xml",
+        "method": "GET",
+        "options": {
+          "timeout": 10000,
+          "followRedirect": true
+        }
+      },
+      "id": "fetch-sitemap",
+      "name": "Fetch Sitemap",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse sitemap XML and extract URLs\nconst xml = $input.item.json;\nconst xmlString = typeof xml === 'string' ? xml : JSON.stringify(xml);\n\n// Simple XML parsing for <loc> tags\nconst urlRegex = /<loc>(.*?)<\\/loc>/g;\nconst urls = [];\nlet match;\n\nwhile ((match = urlRegex.exec(xmlString)) !== null) {\n  urls.push(match[1]);\n}\n\nreturn {\n  json: {\n    ...items[0].json,\n    urls: urls.slice(0, 100), // Limit to 100 URLs\n    url_count: urls.length\n  }\n};"
+      },
+      "id": "parse-sitemap",
+      "name": "Parse Sitemap",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.callback_url }}",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "job_id",
+              "value": "={{ $json.job_id }}"
+            },
+            {
+              "name": "status",
+              "value": "completed"
+            },
+            {
+              "name": "result_data",
+              "value": "={{ $json }}"
+            }
+          ]
+        }
+      },
+      "id": "callback-flask",
+      "name": "Callback to Flask",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Validate Access", "type": "main", "index": 0}]]
+    },
+    "Validate Access": {
+      "main": [[{"node": "Process Crawl Data", "type": "main", "index": 0}]]
+    },
+    "Process Crawl Data": {
+      "main": [[{"node": "Fetch Sitemap", "type": "main", "index": 0}]]
+    },
+    "Fetch Sitemap": {
+      "main": [[{"node": "Parse Sitemap", "type": "main", "index": 0}]]
+    },
+    "Parse Sitemap": {
+      "main": [[{"node": "Callback to Flask", "type": "main", "index": 0}]]
+    }
+  },
+  "pinData": {},
+  "settings": {},
+  "staticData": null,
+  "tags": [
+    {
+      "name": "SEO Autopilot",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z",
+      "id": "seo-autopilot"
+    }
+  ],
+  "triggerCount": 0,
+  "updatedAt": "2024-01-01T00:00:00.000Z",
+  "versionId": "1"
+}
