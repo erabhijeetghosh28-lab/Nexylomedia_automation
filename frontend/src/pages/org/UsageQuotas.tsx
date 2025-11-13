@@ -17,7 +17,11 @@ const monthlyUsage = [
   { label: "Jul", value: 88 },
 ];
 
-const UsageQuotas = () => {
+type OrgPageProps = {
+  onNavigate?: (route: string) => void;
+};
+
+const UsageQuotas = ({ onNavigate }: OrgPageProps) => {
   return (
     <AppShell
       title="Usage & Quotas"
@@ -26,11 +30,13 @@ const UsageQuotas = () => {
         { label: "Org Admin", href: "#" },
         { label: "Usage & Quotas" },
       ]}
+      activeNav="usage"
       rightAccessory={
         <Button variant="outline" size="sm" icon={<FiDownload />}>
           Export usage CSV
         </Button>
       }
+      onNavigate={onNavigate}
     >
       <section className="grid gap-6 lg:grid-cols-[2fr,1fr]">
         <Card

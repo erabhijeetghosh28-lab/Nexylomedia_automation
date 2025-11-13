@@ -60,7 +60,11 @@ const mockCampaigns = [
   },
 ];
 
-const OrgDashboard = () => {
+type OrgPageProps = {
+  onNavigate?: (route: string) => void;
+};
+
+const OrgDashboard = ({ onNavigate }: OrgPageProps) => {
   return (
     <AppShell
       title="Org Dashboard"
@@ -69,6 +73,7 @@ const OrgDashboard = () => {
         { label: "Org Admin", href: "#" },
         { label: "Overview" },
       ]}
+      activeNav="org-dashboard"
       rightAccessory={
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" size="sm" icon={<FiDownload />}>
@@ -79,16 +84,17 @@ const OrgDashboard = () => {
           </Button>
         </div>
       }
+      onNavigate={onNavigate}
     >
       <section className="grid gap-6 lg:grid-cols-4">
         {orgKpis.map((kpi) => (
           <KpiCard
             key={kpi.title}
             title={kpi.title}
+            description={kpi.description}
             value={kpi.value}
             change={kpi.change}
             trend={kpi.trend}
-            tooltip={kpi.tooltip}
             sparkline={<Sparkline values={kpi.sparkline} />}
             icon={<FiArrowUpRight />}
           />

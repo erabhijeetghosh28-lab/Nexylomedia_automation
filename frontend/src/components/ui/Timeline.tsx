@@ -1,6 +1,6 @@
 import type { FC } from "react";
 
-type TimelineItem = {
+export type TimelineItem = {
   id: string;
   title: string;
   description: string;

@@ -15,7 +15,11 @@ import Modal from "../../components/ui/Modal";
 import TextInput from "../../components/ui/TextInput";
 import { integrations } from "../../data/org";
 
-const OrgIntegrations = () => {
+type OrgPageProps = {
+  onNavigate?: (route: string) => void;
+};
+
+const OrgIntegrations = ({ onNavigate }: OrgPageProps) => {
   const [connectModal, setConnectModal] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<
     Record<string, "idle" | "loading" | "success">
@@ -39,11 +43,13 @@ const OrgIntegrations = () => {
         { label: "Org Admin", href: "#" },
         { label: "Integrations" },
       ]}
+      activeNav="integrations"
       rightAccessory={
         <Button variant="outline" size="sm" icon={<FiSettings />}>
           Integration settings
         </Button>
       }
+      onNavigate={onNavigate}
     >
       <section className="grid gap-6 lg:grid-cols-[2fr,1fr]">
         <div className="grid gap-4">
