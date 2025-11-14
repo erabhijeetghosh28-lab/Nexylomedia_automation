@@ -11,24 +11,35 @@ export const requireTenantContext = async (
     throw new HttpError(401, "Unauthorized");
   }
 
-  if (req.auth.tenantId) {
-    return next();
+  // Individual users may have tenantId: null
+  if (req.auth.tenantId !== undefined) {
+    // tenantId can be null for individual users
+    if (req.auth.role === "individual" && req.auth.tenantId === null) {
+      return next(); // Allow individual users without tenant
+    }
+    if (req.auth.tenantId) {
+      return next();
+    }
   }
 
   const membership = await membershipRepository().findOne({
     where: { user: { id: req.auth.userId } },
-    relations: ["tenant"],
+    relations: ["tenant", "tenant.plan"],
   });
 
   if (!membership) {
+    // Individual users might not have membership
+    if (req.auth.role === "individual") {
+      req.auth.tenantId = null;
+      return next();
+    }
     throw new HttpError(403, "No tenant access");
   }
 
-  req.auth = {
-    ...req.auth,
-    tenantId: membership.tenant.id,
-    role: membership.role,
-  };
+  if (req.auth) {
+    req.auth.tenantId = membership.tenant?.id ?? null;
+    req.auth.role = membership.role;
+  }
   next();
 };
 

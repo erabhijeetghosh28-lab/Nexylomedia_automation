@@ -14,6 +14,8 @@ Status log for the Nexylomedia Automation rebuild. Update this file whenever a p
 | Phase 8 | Prospect Radar and pipeline automations | ✅ Complete | 2025-11-13 |
 | Phase 9 | Campaign Management & Ads builder | ✅ Complete | 2025-11-13 |
 | Phase 10 | Content Calendar, Influencer Manager, DAM, notifications, analytics, n8n UI, integrations hub | ✅ Complete | 2025-11-13 |
+| Phase A | Project & SEO Autopilot core (backend) | 🔨 In progress | 2025-11-14 |
+| Phase A.1 | Super admin quotas, billing, and control plane | 🔨 In progress | 2025-11-14 |
 
 ## Detailed Phase Notes
 
@@ -57,6 +59,16 @@ Status log for the Nexylomedia Automation rebuild. Update this file whenever a p
 **Phase 10 — Platform Ops suite**
 - Added content calendar, influencer manager, asset library, notification center, analytics hub, automation studio, and integrations hub pages.
 - Created supporting data files and integrated navigation across all platform-level tooling.
+
+**Phase A — Project & SEO Autopilot core**
+- Drafted backend data model covering projects, domains, site pages, audits, issues, and fix records.
+- Queued queue channel strategy for discovery, PageSpeed, and fix-generation workers.
+- See `docs/phaseA_data_model.md` for detailed schema and API notes.
+
+**Phase A.1 — Super admin quotas & billing**
+- Define tenant plans, quota enforcement, and super-admin control plane scopes.
+- Implement backend entities/routes for quotas and billing metadata.
+- Build separate super-admin UI for tenant control, billing, and feature limits.
 
 ## Update Checklist
 

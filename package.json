@@ -1,0 +1,59 @@
+{
+  "name": "tool_automation",
+  "version": "1.0.0",
+  "description": "Node backend workspace for Nexylomedia Automation.",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node-dev --respawn --transpile-only src/main.ts",
+    "start": "node dist/main.js",
+    "migration:run": "ts-node --transpile-only node_modules/typeorm/cli.js migration:run -d src/config/data-source.ts",
+    "migration:revert": "ts-node --transpile-only node_modules/typeorm/cli.js migration:revert -d src/config/data-source.ts",
+    "lint": "tsc --noEmit",
+    "test": "echo \"No automated tests configured\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/erabhijeetghosh28-lab/Nexylomedia_automation.git"
+  },
+  "keywords": [
+    "backend",
+    "typeorm",
+    "express"
+  ],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/erabhijeetghosh28-lab/Nexylomedia_automation/issues"
+  },
+  "homepage": "https://github.com/erabhijeetghosh28-lab/Nexylomedia_automation#readme",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "bullmq": "^5.63.1",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "ioredis": "^5.8.2",
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.1",
+    "mssql": "^11.0.1",
+    "reflect-metadata": "^0.2.2",
+    "typeorm": "^0.3.27",
+    "uuid": "^13.0.0",
+    "winston": "^3.18.3"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/compression": "^1.8.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.5",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/morgan": "^1.9.10",
+    "@types/node": "^24.10.1",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,4 +1,5 @@
 import {
+  FiActivity,
   FiBarChart2,
   FiFlag,
   FiHome,

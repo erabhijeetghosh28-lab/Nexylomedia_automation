@@ -1,6 +1,7 @@
 import { Entity, Column, OneToMany, Index } from "typeorm";
 import { BaseEntity } from "./BaseEntity";
 import { UserTenant } from "./UserTenant";
+import { Project } from "./Project";
 
 @Entity({ name: "users" })
 export class User extends BaseEntity {
@@ -16,5 +17,8 @@ export class User extends BaseEntity {
 
   @OneToMany(() => UserTenant, (membership) => membership.user)
   memberships!: UserTenant[];
+
+  @OneToMany(() => Project, (project) => project.createdBy)
+  createdProjects!: Project[];
 }
 

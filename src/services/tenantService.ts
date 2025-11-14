@@ -1,6 +1,7 @@
 import { AppDataSource } from "../config/data-source";
 import { Tenant } from "../entities/Tenant";
 import { slugify } from "../utils/slugify";
+import { ensureQuotaAndUsage } from "./quotaService";
 
 export const tenantRepository = () => AppDataSource.getRepository(Tenant);
 
@@ -10,7 +11,9 @@ export const createTenant = async (name: string): Promise<Tenant> => {
     name,
     slug: `${slugify(name)}-${Date.now()}`,
   });
-  return repository.save(tenant);
+  const saved = await repository.save(tenant);
+  await ensureQuotaAndUsage(saved);
+  return saved;
 };
 
 export const findTenantById = async (id: string): Promise<Tenant | null> => {

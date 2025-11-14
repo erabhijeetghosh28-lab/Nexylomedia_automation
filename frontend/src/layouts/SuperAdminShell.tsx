@@ -7,6 +7,7 @@ import Breadcrumbs, {
 import AppFooter from "../components/layout/AppFooter";
 import Button from "../components/ui/Button";
 import { FiPlus, FiShield, FiUsers } from "react-icons/fi";
+import { useNavigate } from "react-router-dom";
 
 type SuperAdminShellProps = {
   breadcrumbs?: Breadcrumb[];
@@ -19,12 +20,10 @@ type SuperAdminShellProps = {
 };
 
 const navItems = [
-  { label: "Overview", icon: <FiShield />, route: "super-admin-dashboard" },
-  { label: "Tenants", icon: <FiUsers />, route: "super-admin-tenants" },
-  { label: "Billing", icon: <FiPlus />, route: "super-admin-billing" },
-  { label: "Feature Flags", icon: <FiShield />, route: "super-admin-flags" },
-  { label: "Audit Logs", icon: <FiShield />, route: "super-admin-logs" },
-  { label: "Integrations", icon: <FiShield />, route: "super-admin-integrations" },
+  { label: "Overview", icon: <FiShield />, path: "/admin" },
+  { label: "Tenants", icon: <FiUsers />, path: "/admin/tenants" },
+  { label: "Plans & Billing", icon: <FiPlus />, path: "/admin/plans" },
+  { label: "Billing analytics", icon: <FiPlus />, path: "/admin/billing" },
 ];
 
 export const SuperAdminShell = ({
@@ -36,8 +35,18 @@ export const SuperAdminShell = ({
   onNavigate,
   activeRoute,
 }: SuperAdminShellProps) => {
-  const [internalRoute, setInternalRoute] = useState(navItems[0].route);
+  const navigate = useNavigate();
+  const [internalRoute, setInternalRoute] = useState(navItems[0].path);
   const currentRoute = activeRoute ?? internalRoute;
+
+  const handleNavigate = (path: string) => {
+    setInternalRoute(path);
+    if (onNavigate) {
+      onNavigate(path);
+    } else {
+      navigate(path);
+    }
+  };
 
   return (
     <div className="flex min-h-screen bg-bg text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -57,10 +66,10 @@ export const SuperAdminShell = ({
         </div>
         <nav className="flex-1 space-y-1 px-3 py-6 text-sm font-medium text-muted dark:text-slate-400">
           {navItems.map((item) => {
-            const isActive = item.route === currentRoute;
+            const isActive = item.path === currentRoute;
             return (
             <button
-              key={item.route}
+              key={item.path}
               type="button"
               className={clsx(
                 "group flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2 transition",
@@ -69,8 +78,7 @@ export const SuperAdminShell = ({
                   : "hover:border-primary/30 hover:bg-primary/5 hover:text-primary dark:hover:border-primary/40 dark:hover:bg-primary/10",
               )}
               onClick={() => {
-                setInternalRoute(item.route);
-                onNavigate?.(item.route);
+                handleNavigate(item.path);
               }}
             >
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-lg text-primary group-hover:bg-primary/20 group-hover:text-primary-light dark:bg-primary/20">
@@ -91,7 +99,7 @@ export const SuperAdminShell = ({
       </aside>
 
       <div className="flex flex-1 flex-col lg:pl-0">
-        <Topbar role="super_admin" onNavigate={onNavigate} />
+        <Topbar role="super_admin" onNavigate={handleNavigate} />
         <div className="bg-primary text-primary-foreground px-4 py-2 text-xs font-medium text-center dark:bg-primary-dark">
           Super Admin mode — monitor tenants, billing, feature flags, and platform health
         </div>

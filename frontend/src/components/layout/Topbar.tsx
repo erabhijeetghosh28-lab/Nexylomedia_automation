@@ -1,6 +1,7 @@
 import {
   FiBell,
   FiChevronDown,
+  FiLogOut,
   FiMenu,
   FiMoon,
   FiSearch,
@@ -8,7 +9,9 @@ import {
 } from "react-icons/fi";
 import { useState, useMemo } from "react";
 import type { FC } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTheme } from "../../contexts/ThemeContext";
+import { useAuth } from "../../contexts/AuthContext";
 import clsx from "clsx";
 
 type TopbarProps = {
@@ -17,15 +20,17 @@ type TopbarProps = {
   onNavigate?: (route: string) => void;
 };
 
-const mockOrgs = [
-  { id: "nexylo", name: "Nexylomedia HQ" },
-  { id: "acme", name: "Acme Retail" },
-  { id: "luna", name: "Luna Cosmetics" },
-];
-
 export const Topbar: FC<TopbarProps> = ({ onSidebarToggle, role = "org_admin", onNavigate }) => {
   const { theme, toggleTheme } = useTheme();
+  const { logout } = useAuth();
+  const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+    setMenuOpen(false);
+  };
 
   const menuSections = useMemo(() => {
     const sections: Array<{ title: string; items: Array<{ label: string; route: string }> }> = [];
@@ -34,171 +39,38 @@ export const Topbar: FC<TopbarProps> = ({ onSidebarToggle, role = "org_admin", o
       sections.push({
         title: "Super Admin",
         items: [
-          { label: "Overview", route: "super-admin-dashboard" },
-          { label: "Tenants", route: "super-admin-tenants" },
-          { label: "Tenant detail", route: "super-admin-tenant-detail" },
-          { label: "Billing", route: "super-admin-billing" },
-          { label: "Feature flags", route: "super-admin-flags" },
-          { label: "Audit logs", route: "super-admin-logs" },
-          { label: "Global integrations", route: "super-admin-integrations" },
+          { label: "Control center", route: "/admin" },
+          { label: "Tenants", route: "/admin/tenants" },
+          { label: "Plans & billing", route: "/admin/plans" },
+          { label: "Billing analytics", route: "/admin/billing" },
         ],
       });
 
       sections.push({
-        title: "Org Admin",
+        title: "Switch workspaces",
         items: [
-          { label: "Org dashboard", route: "org-dashboard" },
-          { label: "Team & users", route: "team" },
-          { label: "Org settings", route: "settings" },
-          { label: "Integrations", route: "integrations" },
-          { label: "Feature flags", route: "flags" },
-          { label: "Usage & quotas", route: "usage" },
-        ],
-      });
-
-      sections.push({
-        title: "SEO Autopilot",
-        items: [
-          { label: "Automation overview", route: "seo-dashboard" },
-          { label: "Playbooks", route: "seo-playbooks" },
-          { label: "Alerts", route: "seo-alerts" },
-        ],
-      });
-
-      sections.push({
-        title: "Market Research",
-        items: [
-          { label: "Research HQ", route: "marketing-dashboard" },
-          { label: "Personas", route: "marketing-personas" },
-          { label: "Trends", route: "marketing-trends" },
-          { label: "Competitors", route: "marketing-competitors" },
-        ],
-      });
-
-      sections.push({
-        title: "Prospect Radar",
-        items: [
-          { label: "Overview", route: "prospect-dashboard" },
-          { label: "Leads", route: "prospect-leads" },
-          { label: "Sequences", route: "prospect-sequences" },
-          { label: "Pipeline", route: "prospect-pipeline" },
-        ],
-      });
-
-      sections.push({
-        title: "Campaigns",
-        items: [
-          { label: "Command center", route: "campaign-dashboard" },
-          { label: "Planner", route: "campaign-planner" },
-          { label: "Ads builder", route: "campaign-ads" },
-          { label: "Budget & pacing", route: "campaign-budget" },
-        ],
-      });
-
-      sections.push({
-        title: "Platform Ops",
-        items: [
-          { label: "Content calendar", route: "platform-content" },
-          { label: "Influencer manager", route: "platform-influencers" },
-          { label: "Asset library", route: "platform-assets" },
-          { label: "Notification center", route: "platform-notifications" },
-          { label: "Analytics hub", route: "platform-analytics" },
-          { label: "Automation studio", route: "platform-automation" },
-          { label: "Integrations hub", route: "platform-integrations" },
-        ],
-      });
-
-      sections.push({
-        title: "Member workspace",
-        items: [
-          { label: "My workspace", route: "member-dashboard" },
-          { label: "Tasks & activity", route: "member-tasks" },
-          { label: "Insights", route: "member-insights" },
-          { label: "Automation center", route: "member-automations" },
+          { label: "Org admin workspace", route: "/projects" },
+          { label: "Member view", route: "/projects" },
         ],
       });
     } else if (role === "org_admin") {
       sections.push({
         title: "Org Admin",
         items: [
-          { label: "Org dashboard", route: "org-dashboard" },
-          { label: "Team & users", route: "team" },
-          { label: "Org settings", route: "settings" },
-          { label: "Integrations", route: "integrations" },
-          { label: "Feature flags", route: "flags" },
-          { label: "Usage & quotas", route: "usage" },
-        ],
-      });
-
-      sections.push({
-        title: "SEO Autopilot",
-        items: [
-          { label: "Automation overview", route: "seo-dashboard" },
-          { label: "Playbooks", route: "seo-playbooks" },
-          { label: "Alerts", route: "seo-alerts" },
-        ],
-      });
-
-      sections.push({
-        title: "Market Research",
-        items: [
-          { label: "Research HQ", route: "marketing-dashboard" },
-          { label: "Personas", route: "marketing-personas" },
-          { label: "Trends", route: "marketing-trends" },
-          { label: "Competitors", route: "marketing-competitors" },
-        ],
-      });
-
-      sections.push({
-        title: "Prospect Radar",
-        items: [
-          { label: "Overview", route: "prospect-dashboard" },
-          { label: "Leads", route: "prospect-leads" },
-          { label: "Sequences", route: "prospect-sequences" },
-          { label: "Pipeline", route: "prospect-pipeline" },
-        ],
-      });
-
-      sections.push({
-        title: "Campaigns",
-        items: [
-          { label: "Command center", route: "campaign-dashboard" },
-          { label: "Planner", route: "campaign-planner" },
-          { label: "Ads builder", route: "campaign-ads" },
-          { label: "Budget & pacing", route: "campaign-budget" },
-        ],
-      });
-
-      sections.push({
-        title: "Platform Ops",
-        items: [
-          { label: "Content calendar", route: "platform-content" },
-          { label: "Influencer manager", route: "platform-influencers" },
-          { label: "Asset library", route: "platform-assets" },
-          { label: "Notification center", route: "platform-notifications" },
-          { label: "Analytics hub", route: "platform-analytics" },
-          { label: "Automation studio", route: "platform-automation" },
-          { label: "Integrations hub", route: "platform-integrations" },
-        ],
-      });
-
-      sections.push({
-        title: "Member workspace",
-        items: [
-          { label: "My workspace", route: "member-dashboard" },
-          { label: "Tasks & activity", route: "member-tasks" },
-          { label: "Insights", route: "member-insights" },
-          { label: "Automation center", route: "member-automations" },
+          { label: "Org dashboard", route: "/projects" },
+          { label: "Team & users", route: "/projects" },
+          { label: "Org settings", route: "/projects" },
+          { label: "Integrations", route: "/projects" },
+          { label: "Usage & quotas", route: "/projects" },
         ],
       });
     } else {
       sections.push({
         title: "Workspace",
         items: [
-          { label: "My workspace", route: "member-dashboard" },
-          { label: "Tasks & activity", route: "member-tasks" },
-          { label: "Insights", route: "member-insights" },
-          { label: "Automation center", route: "member-automations" },
+          { label: "My workspace", route: "/projects" },
+          { label: "Tasks & activity", route: "/projects" },
+          { label: "Insights", route: "/projects" },
         ],
       });
     }
@@ -248,19 +120,6 @@ export const Topbar: FC<TopbarProps> = ({ onSidebarToggle, role = "org_admin", o
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="hidden md:flex items-center gap-4">
-            <div className="group relative">
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-bg px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:border-primary/40 hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:text-primary"
-              >
-                <span className="inline-flex h-2 w-2 rounded-full bg-secondary" />
-                <span>{mockOrgs[0].name}</span>
-                <FiChevronDown />
-              </button>
-            </div>
-          </div>
-
           <button
             type="button"
             onClick={toggleTheme}
@@ -312,7 +171,11 @@ export const Topbar: FC<TopbarProps> = ({ onSidebarToggle, role = "org_admin", o
                     className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-primary/10 hover:text-primary dark:text-slate-200 dark:hover:bg-slate-800"
                     onClick={() => {
                       setMenuOpen(false);
-                      onNavigate?.(item.route);
+                      if (onNavigate) {
+                        onNavigate(item.route);
+                      } else if (item.route.startsWith("/")) {
+                        window.location.assign(item.route);
+                      }
                     }}
                   >
                     <span>{item.label}</span>
@@ -325,10 +188,11 @@ export const Topbar: FC<TopbarProps> = ({ onSidebarToggle, role = "org_admin", o
           <div className="border-t border-border px-4 py-3 dark:border-slate-800">
             <button
               type="button"
-              className="w-full rounded-xl px-3 py-2 text-left text-sm text-muted transition hover:bg-primary/10 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-800"
-              onClick={() => setMenuOpen(false)}
+              className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-danger transition hover:bg-danger/10 hover:text-danger dark:text-slate-400 dark:hover:bg-slate-800"
+              onClick={handleLogout}
             >
-              Close menu
+              <FiLogOut className="text-base" />
+              <span>Sign out</span>
             </button>
           </div>
         </div>

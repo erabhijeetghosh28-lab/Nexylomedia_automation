@@ -5,8 +5,9 @@ declare global {
     interface Request {
       auth?: {
         userId: string;
-        tenantId?: string;
+        tenantId?: string | null;
         role?: TenantRole;
+        scopes?: string[];
       };
     }
   }

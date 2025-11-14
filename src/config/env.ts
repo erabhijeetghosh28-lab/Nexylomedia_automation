@@ -1,10 +1,22 @@
 import path from "path";
+import fs from "fs";
 import { config as loadEnv } from "dotenv";
 
 const envFile = process.env.APP_ENV === "test" ? ".env.test" : ".env";
-loadEnv({
-  path: path.resolve(process.cwd(), "..", "..", envFile),
-});
+const cwd = process.cwd();
+const candidatePaths = [
+  path.resolve(cwd, envFile),
+  path.resolve(cwd, "..", envFile),
+  path.resolve(cwd, "..", "..", envFile),
+];
+
+const envPath = candidatePaths.find((filePath) => fs.existsSync(filePath));
+
+if (envPath) {
+  loadEnv({ path: envPath });
+} else {
+  loadEnv(); // fall back to default .env resolution
+}
 
 const requiredVars = ["JWT_SECRET", "DATABASE_URL"];
 
@@ -31,6 +43,7 @@ export const env = {
     useSSL: process.env.MINIO_USE_SSL === "true",
   },
   geminiApiKey: process.env.GEMINI_API_KEY ?? "",
+  groqApiKey: process.env.GROQ_API_KEY ?? "",
   pageSpeedApiKey: process.env.PAGESPEED_API_KEY ?? "",
   smtp: {
     host: process.env.SMTP_HOST ?? "mailhog-local",

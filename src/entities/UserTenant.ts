@@ -9,7 +9,7 @@ import { BaseEntity } from "./BaseEntity";
 import { User } from "./User";
 import { Tenant } from "./Tenant";
 
-export type TenantRole = "super_admin" | "org_admin" | "member";
+export type TenantRole = "super_admin" | "org_admin" | "member" | "individual";
 
 @Entity({ name: "user_tenants" })
 @Unique(["user", "tenant"])
@@ -24,5 +24,8 @@ export class UserTenant extends BaseEntity {
 
   @Column({ type: "nvarchar", length: 32 })
   role!: TenantRole;
+
+  @Column("simple-json", { nullable: true })
+  toolAccess?: Record<string, boolean> | null;
 }
 
